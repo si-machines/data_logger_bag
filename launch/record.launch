@@ -1,0 +1,26 @@
+<launch>
+
+    <!-- Setup the node with parameters for what we want to listen to 
+         and what the flag used to trigger recording -->
+
+    <node name= "data_logger" pkg="data_logger_bag" type="logger.py" respawn="false" output="screen">
+
+        <!-- This location assumes that it is in your home dir. NOTE: path will be created for you -->
+        <!-- default: data -->
+        <param name="datapath" value="data/c6_data" type="string"/>
+
+        <!-- Note: the topics are separated just by spaces -->
+        <!-- default: joint_states c6_logger_flag -->
+        <param name="record_topics" value="rosout rosout_agg" type="string"/>
+
+        <!-- prefix before filenames to append -->
+        <!-- default: collection -->
+        <param name="data_prefix" value="collection" type="string"/>
+
+        <!-- Topic name to trigger recording on -->
+        <!-- default: c6_logger_flag -->
+        <param name="log_flag_topic" value="c6_logger_flag" type="string"/>
+
+    </node>
+
+</launch>

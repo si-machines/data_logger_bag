@@ -1,0 +1,16 @@
+<package>
+  <description brief="data_logger_bag">
+
+     data_logger_bag
+
+  </description>
+  <author>Vivian Chu</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/data_logger_bag</url>
+  <depend package="rospy"/>
+  <depend package="std_msgs"/>
+
+</package>
+
+
