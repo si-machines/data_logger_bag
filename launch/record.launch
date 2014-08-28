@@ -11,7 +11,8 @@
 
         <!-- Note: the topics are separated just by spaces -->
         <!-- default: joint_states c6_logger_flag -->
-        <param name="record_topics" value="camera/depth_registered/image_raw camera/depth_registered/camera_info camera/rgb/image_raw camera/rgb/camera_info c6_logger_flag joint_states loadx6_right_state loadx6_left_state KF_current_frame" type="string"/>
+        <!--param name="record_topics" value="camera/depth_registered/image_raw camera/depth_registered/camera_info camera/rgb/image_raw camera/rgb/camera_info c6_logger_flag joint_states loadx6_right_state loadx6_left_state KF_current_frame" type="string"/-->
+        <param name="record_topics" value="camera/depth_registered/image_raw camera/depth_registered/camera_info camera/rgb/image_raw camera/rgb/camera_info c6_logger_flag joint_states loadx6_right_state loadx6_left_state KF_current_frame humanoid_state zlift_state omnibase_state" type="string"/>
 
         <!-- prefix before filenames to append -->
         <!-- default: collection -->

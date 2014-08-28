@@ -43,7 +43,9 @@ class BagDataLogger:
         rospy.Subscriber(self.logger_flag_topic, Bool, self.flag_callback)
 
         # Setup a listener for the task and action to put in a custom folder
-        #rospy.Subscriber(self.task_action_topic, String, self.change_dir_cb)
+        # This message also contains which logging topics that the user can
+        # specify to listen to
+        #rospy.Subscriber(self.task_action_topic, String, self.change_log_settings_cb)
 
         # Start the ros node
         rospy.spin()
@@ -53,7 +55,7 @@ class BagDataLogger:
     CB that changes the location of where we are saving data to based off of 
     the current task and action
     '''
-    def change_dir_cb(self, msg):
+    def change_log_settings_cb(self, msg):
 
         # Only change the directory if we are not currently writing to a file
         if self.logger_flag is False:
@@ -65,6 +67,16 @@ class BagDataLogger:
                 self.data_location = msg.data
                 rospy.loginfo("Location writing changed to: %s" % self.data_location)
 
+                # Also for now
+                self.record_topics = msg.data
+                rospy.loginfo("Topics that will be subscribed to: %s" % self.record_topics)
+
+                # Change prefix of the data to say if we are demonstrating or playing back
+                self.data_prefix = msg.data
+                rospy.loginfo("Data prefix is %s:" % self.data_prefix)
+
+        else:
+            rospy.loginfo("Currently still writing previous record. Settings for logging NOT changed")
 
 
     '''
