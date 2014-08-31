@@ -19,8 +19,8 @@
         <param name="data_prefix" value="collection" type="string"/>
 
         <!-- Topic name to trigger recording on -->
-        <!-- default: c6_logger_flag -->
-        <param name="log_flag_topic" value="c6_logger_flag" type="string"/>
+        <!-- default: data_logger_flag -->
+        <param name="log_flag_topic" value="data_logger_flag" type="string"/>
 
     </node>
 

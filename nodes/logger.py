@@ -6,6 +6,7 @@ import time
 import subprocess
 import signal
 from std_msgs.msg import Bool, String
+from data_logger_bag.msg import LogControl
 
 class BagDataLogger:
 
@@ -20,11 +21,13 @@ class BagDataLogger:
 
         # default topics to record - separated only by a space
         default_record_topics = "joint_states c6_logger_flag"
-        default_log_flag = "c6_logger_flag"
+        default_log_flag = "data_logger_flag"
         default_data_location = "data"
-        default_data_prefix = "collection"
+        default_data_prefix = "playback"
+        default_c6_task_topic = "C6_Task_Description"
 
         # Get parameter names from the param server
+        self.c6_task_topic = rospy.get_param("~c6_task_topic", default_c6_task_topic) 
         self.logger_flag_topic = rospy.get_param("~log_flag_topic", default_log_flag)
         self.record_topics = rospy.get_param("~record_topics", default_record_topics)
         self.data_location = rospy.get_param("~datapath", default_data_location)
@@ -32,6 +35,15 @@ class BagDataLogger:
 
         # Initialize the flag to false
         self.logger_flag = False
+
+        # Intialize default task and skill names
+        self.task = "default_task"
+        self.skill = "default_skill"
+
+        # Append the task and skill onto the data_location
+        self.data_custom_location = os.path.join(self.data_location, self.task, self.skill)
+        
+        rospy.loginfo("Initialized data logger node")
 
     '''
     Setup the subscribers
@@ -45,7 +57,7 @@ class BagDataLogger:
         # Setup a listener for the task and action to put in a custom folder
         # This message also contains which logging topics that the user can
         # specify to listen to
-        #rospy.Subscriber(self.task_action_topic, String, self.change_log_settings_cb)
+        rospy.Subscriber(self.c6_task_topic, LogControl, self.change_log_settings_cb)
 
         # Start the ros node
         rospy.spin()
@@ -59,21 +71,32 @@ class BagDataLogger:
 
         # Only change the directory if we are not currently writing to a file
         if self.logger_flag is False:
-      
-            # Only change if the task and action has changed
-            if self.data_location != msg.data:
+    
+            if msg.taskName is not "":
+                self.task = msg.taskName
 
-                # For now until I know the custom message type
-                self.data_location = msg.data
-                rospy.loginfo("Location writing changed to: %s" % self.data_location)
+            if msg.skillName is not "":
+                self.skill = msg.skillName
 
-                # Also for now
-                self.record_topics = msg.data
-                rospy.loginfo("Topics that will be subscribed to: %s" % self.record_topics)
+            if msg.topics is not "":
+                self.record_topics = msg.topics
+            
+            playback_flag = msg.playback
 
-                # Change prefix of the data to say if we are demonstrating or playing back
-                self.data_prefix = msg.data
-                rospy.loginfo("Data prefix is %s:" % self.data_prefix)
+            # Append the task and skill onto the data_location
+            self.data_custom_location = os.path.join(self.data_location, self.task, self.skill) 
+            rospy.loginfo("Location writing changed to: %s" % self.data_custom_location)
+
+            # What topics we're recording
+            rospy.loginfo("Topics that will be subscribed to: %s" % self.record_topics)
+
+            # Change prefix of the data to say if we are demonstrating or playing back
+            if (playback_flag):
+                self.data_prefix="playback"
+            else:
+                self.data_prefix="learning"
+
+            rospy.loginfo("Data prefix is: %s" % self.data_prefix)
 
         else:
             rospy.loginfo("Currently still writing previous record. Settings for logging NOT changed")
@@ -107,7 +130,7 @@ class BagDataLogger:
     
         rospy.loginfo("Set up bag file to write to")
         filename = self.data_prefix + "_"+time.strftime("%Y-%m-%dT%H%M%S") + ".bag"
-        datapath = os.path.join(os.path.expanduser("~"),self.data_location, filename)
+        datapath = os.path.join(os.path.expanduser("~"),self.data_custom_location, filename)
         #rospy.loginfo("File name is: %s" % datapath)
         
         # Check if directory exists
