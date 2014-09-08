@@ -33,7 +33,7 @@ class DataTableBag():
         self.skip_topics = rospy.get_param("~skip_topics", default_skip_topics)
         self.trigger_topic = rospy.get_param("~trigger_topic", default_trigger_topic)
         input_files = rospy.get_param("~input_files", "")
-        self.output_filename = rospy.get_param("~output_file", "converted_data.bag")
+        self.output_filename = rospy.get_param("~output_file", "converted_data.h5")
 
         if input_files == "":
             rospy.logerr("Usage: %s _input_files:=<input_files> \n Optional args:\n_output_file:=<output_file.h5>\n_skip_topics:=<ros topics to NOT parse>\n_trigger_topic:=<what ros topic to downsample to>" % sys.argv[0])
@@ -64,7 +64,7 @@ class DataTableBag():
 
     def process_bag(self, filename):
 
-        print "Processing bag: %s" % filename
+        rospy.loginfo("Processing bag: %s" % filename)
         bag = rosbag.Bag(filename)
 
         # Initialize variables
@@ -136,32 +136,21 @@ class DataTableBag():
         elif msg_type == 'std_msgs/Bool':
             self.process_bool(topic, msg, stamp)
         else:
-            print "Message type: %s is not supported" % msg_type
+            rospy.logerr("Message type: %s is not supported" % msg_type)
 
 
     def process_wrench(self, topic, msg, stamp):
 
-        #print "processing geometry_msgs/Wrench message"
-        # Process forces
-        if 'force' not in self.all_data[topic]:
-            self.all_data[topic]['force'] = []
+        msg_fields = ['force','torque']
+        for field in msg_fields:
+            if field not in self.all_data[topic]:
+                self.all_data[topic][field] = []
 
-        # Store the value
-        force_store = []
-        force_store.append(msg.force.x)
-        force_store.append(msg.force.y)
-        force_store.append(msg.force.z)
-        self.all_data[topic]['force'].append(force_store)
-        
-        # Process torques
-        if 'torque' not in self.all_data[topic]:
-            self.all_data[topic]['torque'] = []
-
-        torque_store = []
-        torque_store.append(msg.torque.x)
-        torque_store.append(msg.torque.y)
-        torque_store.append(msg.torque.z)
-        self.all_data[topic]['torque'].append(torque_store)
+            data_store = []
+            data_store.append(eval('msg.'+field+'.x'))
+            data_store.append(eval('msg.'+field+'.y'))
+            data_store.append(eval('msg.'+field+'.z'))
+            self.all_data[topic][field].append(data_store)
         
         # Process timestamp - currently just seconds
         if 'time' not in self.all_data[topic]:
@@ -184,33 +173,25 @@ class DataTableBag():
 
     def process_jointState(self, topic, msg):
 
-        #print "processing sensor_msgs/JointState message"
+        # Store the name only once
         if 'name' not in self.all_data[topic]:
             self.all_data[topic]['name'] = msg.name
 
-        if 'position' not in self.all_data[topic]:
-            self.all_data[topic]['position'] = []
-
-        self.all_data[topic]['position'].append(msg.position)
-
-        if 'velocity' not in self.all_data[topic]:
-            self.all_data[topic]['velocity'] = []
-
-        self.all_data[topic]['velocity'].append(msg.velocity)
-
-        if 'effort' not in self.all_data[topic]:
-            self.all_data[topic]['effort'] = []
-
-        self.all_data[topic]['effort'].append(msg.effort)
-        
+        # Store all of the timestamps by seconds from msg
         if 'time' not in self.all_data[topic]:
             self.all_data[topic]['time'] = []
-
         self.all_data[topic]['time'].append(msg.header.stamp.to_sec())
+
+        # Go through the actual fields of the msg and populate
+        msg_fields = ['position','velocity','effort']
+        for msg_field in msg_fields:
+            if msg_field not in self.all_data[topic]:
+                self.all_data[topic][msg_field] = []
+
+            self.all_data[topic][msg_field].append(eval('msg.'+msg_field))
 
     def process_clusterArray(self, msg):
 
-        #print "processing rospcseg/ClusterArrayV0 message"
         return
         
     def process_cameraInfo(self, msg):
@@ -225,13 +206,22 @@ class DataTableBag():
 
     def process_logControl(self, topic, msg, stamp):
 
-        #print "processing data_logger_bag/LogControl message"
-        return
+        msg_fields = ['taskName', 'actionType', 'skillName', 'topics', 'playback']
+        for msg_field in msg_fields:
+            if msg_field not in self.all_data[topic]:
+                self.all_data[topic][msg_field] = []
+
+            self.all_data[topic][msg_field].append(eval('msg.'+msg_field))
+
+        # Store all of the timestamps by seconds from stamp
+        if 'time' not in self.all_data[topic]:
+            self.all_data[topic]['time'] = []
+        self.all_data[topic]['time'].append(stamp.to_sec())
 
     def process_bool(self, topic, msg, stamp):
 
-        #print "processing data_logger_bag/LogControl message"
-        return
+        # It is currently the same for this type
+        self.process_int8(topic, msg, stamp)
 
     def write_pytables(self, filename):
 
@@ -244,9 +234,9 @@ class DataTableBag():
         path_name = os.path.split(group_name) # Split filepath from filename
         group_name = path_name[1] + '_'+path_name[0].split("/")[-1]
         #group_name = group_name+'_'+str(fileCounter) # Add simple counter for ID purposes later
-        group_name = "haptic_exploration_"+path_name[0].split("/")[-1]+"_"+str(self.fileCounter) 
+        group_name = "exploration_"+path_name[0].split("/")[-1]+"_"+str(self.fileCounter) 
         
-        print "Writing file: %s to pytable" % path_name[1]
+        rospy.loginfo("Writing file: %s to pytable" % path_name[1])
 
         bag_group = self.h5file.createGroup("/", group_name)
        
@@ -282,80 +272,53 @@ class DataTableBag():
                 self.write_bool(topic_group, data)
                 
             else:
-                print "Message type: %s is not supported" % msg_type
+                rospy.logerr("Message type: %s is not supported" % msg_type)
         
 
     def write_wrench(self, topic_group, data):
 
-        # Write force
-        data_size = np.shape(data['force'])
-        carray = self.h5file.createCArray(topic_group, 'force', tables.Float64Atom(), data_size)
-        carray[:] = data['force']
-       
-        # Write torque
-        data_size = np.shape(data['torque'])
-        carray = self.h5file.createCArray(topic_group, 'torque', tables.Float64Atom(), data_size)
-        carray[:] = data['torque']
-
-        # Write time
-        data_size = np.shape(data['time'])
-        carray = self.h5file.createCArray(topic_group, 'time', tables.Float64Atom(), data_size)
-        carray[:] = data['time']
+        self.pytable_writer_helper(topic_group, data.keys(), tables.Float64Atom(), data)
 
     def write_int8(self, topic_group, data):
 
-        # Write data
-        data_size = np.shape(data['data'])
-        carray = self.h5file.createCArray(topic_group, 'data', tables.Int64Atom(), data_size)
-        carray[:] = data['data']
-
-        # Write time
-        data_size = np.shape(data['time'])
-        carray = self.h5file.createCArray(topic_group, 'time', tables.Float64Atom(), data_size)
-        carray[:] = data['time']
+        self.pytable_writer_helper(topic_group, ['data'], tables.Int64Atom(), data)
+        self.pytable_writer_helper(topic_group, ['time'], tables.Float64Atom(), data)
 
     def write_jointState(self, topic_group, data):
 
-        # Write joint names
-        data_size = np.shape(data['name'])
-        carray = self.h5file.createCArray(topic_group, 'name', tables.StringAtom(itemsize=20), (data_size))
-        carray[:] = data['name']
+        fields = ['position', 'velocity', 'effort', 'time']
+        self.pytable_writer_helper(topic_group, fields, tables.Float64Atom(), data)
+        self.pytable_writer_helper(topic_group, ['name'], tables.StringAtom(itemsize=20), data)
 
-        # Write joint positions
-        data_size = np.shape(data['position'])
-        carray = self.h5file.createCArray(topic_group, 'position', tables.Float64Atom(), data_size)
-        carray[:] = data['position']
-        
-        # Write joint velocities
-        data_size = np.shape(data['velocity'])
-        carray = self.h5file.createCArray(topic_group, 'velocity', tables.Float64Atom(), data_size)
-        carray[:] = data['velocity']
-
-        # Write joint velocities
-        data_size = np.shape(data['effort'])
-        carray = self.h5file.createCArray(topic_group, 'effort', tables.Float64Atom(), data_size)
-        carray[:] = data['effort']
-
-        # Write time
-        data_size = np.shape(data['time'])
-        carray = self.h5file.createCArray(topic_group, 'time', tables.Float64Atom(), data_size)
-        carray[:] = data['time']
-
-    def write_clusterArray(self, bag_group, topic):
-
+    def write_clusterArray(self, topic_group, data):
         return
 
-    def write_cameraInfo(self, bag_group, topic):
+    def write_cameraInfo(self, topic_group, data):
         return
 
-    def write_string(self, bag_group, topic):
-        return
+    def write_string(self, topic_group, data):
 
-    def write_logControl(self, bag_group, topic):
-        return
+        self.pytable_writer_helper(topic_group, ['data'], tables.StringAtom(itemsize=20), data)
+        self.pytable_writer_helper(topic_group, ['time'], tables.Float64Atom(), data)
 
-    def write_bool(self, bag_group, topic):
-        return
+    def write_logControl(self, topic_group, data):
+
+        fields = ['taskName', 'actionType', 'skillName', 'topics']
+        self.pytable_writer_helper(topic_group, fields, tables.StringAtom(itemsize=20), data)
+        self.pytable_writer_helper(topic_group, ['playback'], tables.BoolAtom(), data)
+
+    def write_bool(self, topic_group, data):
+
+        self.pytable_writer_helper(topic_group, ['data'], tables.BoolAtom(), data)
+        self.pytable_writer_helper(topic_group, ['time'], tables.Float64Atom(), data)
+
+    def pytable_writer_helper(self, topic_group, fields, data_type, data):
+
+        # Go through the fields and write to the group
+        for field in fields:
+            data_size = np.shape(data[field])
+            carray = self.h5file.createCArray(topic_group, field, data_type, data_size)
+            carray[:] = data[field]
 
 
 def main():
