@@ -6,11 +6,10 @@ import rosbag
 import numpy
 import sys
 import os
-from optparse import OptionParser
-import itertools
 import tables
 import subprocess
 import yaml
+import glob
 from collections import defaultdict
 import numpy as np
 
@@ -22,12 +21,26 @@ class DataTableBag():
 
     def __init__(self):
 
-        # TODO: These need to be parameterized later
-        # Topics to skip
-        self.skip_topics = "camera/depth_registered/image_raw camera/rgb/image_raw c6_end_effect_pose_right c6_end_effect_pose_left"
-        
-        # Topic to downsample to
-        self.trigger_topic = "aff_haptic_state"
+        # Intialize the node
+        rospy.init_node("bag_parser", anonymous=True)
+        rospy.loginfo("Initializing bag parser")
+       
+        # Default topics to skip and subsample to
+        default_skip_topics = "camera/depth_registered/image_raw camera/rgb/image_raw c6_end_effect_pose_right c6_end_effect_pose_left"
+        default_trigger_topic = "C6_FSM_state"
+
+        # read paramater
+        self.skip_topics = rospy.get_param("~skip_topics", default_skip_topics)
+        self.trigger_topic = rospy.get_param("~trigger_topic", default_trigger_topic)
+        input_files = rospy.get_param("~input_files", "")
+        self.output_filename = rospy.get_param("~output_file", "converted_data.bag")
+
+        if input_files == "":
+            rospy.logerr("Usage: %s _input_files:=<input_files> \n Optional args:\n_output_file:=<output_file.h5>\n_skip_topics:=<ros topics to NOT parse>\n_trigger_topic:=<what ros topic to downsample to>" % sys.argv[0])
+            sys.exit()
+
+        # Expand wildcards if any
+        self.input_filenames = glob.glob(os.path.expanduser(input_files))
 
         # Initialize some variables that might be needed
         self.fileCounter = 0 
@@ -347,21 +360,8 @@ class DataTableBag():
 
 def main():
 
-    if len(sys.argv) < 3:
-        print "Usage: %s [input_files] [output_files]" % sys.argv[0]
-        return
-
-    input_filenames = sys.argv[1:-1]
-    output_filename = sys.argv[-1]
-
-    if not output_filename.endswith(".h5"):
-        print "Filename: %s is not a h5 file" % output_filename
-        sys.exit()
-
     # Create DataTableBag object
     data = DataTableBag()
-    data.input_filenames = input_filenames
-    data.output_filename = output_filename
 
     # Open up h5 file to write
     data.setup_h5()
