@@ -13,9 +13,10 @@ import glob
 from collections import defaultdict
 import numpy as np
 
-from geometry_msgs.msg import Pose2D, Wrench, Vector3, Point, Pose
-from std_msgs.msg import String, Int8, Float32MultiArray
-from sensor_msgs.msg import JointState
+#from geometry_msgs.msg import Pose2D, Wrench, Vector3, Point, Pose
+#from std_msgs.msg import String, Int8, Float32MultiArray
+#from sensor_msgs.msg import JointState
+#from pcseg_msgs.msg import ClusterArrayV0
 
 class DataTableBag():
 
@@ -122,7 +123,7 @@ class DataTableBag():
             self.process_jointState(topic, msg)
             
         elif msg_type == 'rospcseg/ClusterArrayV0':
-            self.process_clusterArray(data)
+            self.process_clusterArray(topic, msg, stamp)
             
         elif msg_type == 'sensor_msgs/CameraInfo':
             self.process_cameraInfo(data)
@@ -138,6 +139,15 @@ class DataTableBag():
         else:
             rospy.logerr("Message type: %s is not supported" % msg_type)
 
+
+    def msg_field_helper(self, msg):
+        '''
+        Used for custom messages that are not standard in ROS
+        '''
+        
+        helper_fields = ['serialize', 'serialize_numpy', 'deserialize', 'deserialize_numpy']
+        fields = [name for name in dir(msg) if not (name.startswith('__') or name.startswith('_') or name in helper_fields)]
+        return fields 
 
     def process_wrench(self, topic, msg, stamp):
 
@@ -190,10 +200,49 @@ class DataTableBag():
 
             self.all_data[topic][msg_field].append(eval('msg.'+msg_field))
 
-    def process_clusterArray(self, msg):
+    def process_clusterArray(self, topic, msg, stamp):
 
-        return
-        
+        fields = self.msg_field_helper(msg.clusters[0])
+
+        # Go through each cluster and turn into a single dict that we will convert
+        clusters = []
+        for one_cluster in msg.clusters:
+            obj = dict()
+            for field in fields:
+                data = eval('one_cluster.'+field)
+                if hasattr(data, '_type'):
+                    if data._type == 'geometry_msgs/Vector3':
+                        val = [data.x, data.y, data.z]
+                    elif data._type == 'std_msgs/ColorRGBA':
+                        val = [data.r, data.g, data.b, data.a]
+                    else:
+                        rospy.logerr("Unknown field type %s in msg type %s" % (data._type, msg.clusters[0]._type))
+                else: 
+                    val = data
+
+                # Write the data to the field
+                obj[field] = val
+            clusters.append(obj)
+     
+        # Store the clusters away
+        if 'clusters' not in self.all_data[topic]:
+            self.all_data[topic]['clusters'] = []
+        self.all_data[topic]['clusters'].append(clusters)
+
+        # Store all of the timestamps by seconds from stamp
+        if 'time' not in self.all_data[topic]:
+            self.all_data[topic]['time'] = []
+        self.all_data[topic]['time'].append(stamp.to_sec())
+
+        # Store the max number of objects seen 
+        if 'max_item' not in self.all_data[topic]:
+            cur_max = 1
+        else:
+            cur_max = self.all_data[topic]['max_item']
+
+        self.all_data[topic]['max_item'] = max(cur_max,len(clusters))
+            
+
     def process_cameraInfo(self, msg):
 
         #print "processing sensor_msgs/CameraInfo message"
@@ -206,7 +255,7 @@ class DataTableBag():
 
     def process_logControl(self, topic, msg, stamp):
 
-        msg_fields = ['taskName', 'actionType', 'skillName', 'topics', 'playback']
+        msg_fields = self.msg_field_helper(msg)
         for msg_field in msg_fields:
             if msg_field not in self.all_data[topic]:
                 self.all_data[topic][msg_field] = []
@@ -291,7 +340,44 @@ class DataTableBag():
         self.pytable_writer_helper(topic_group, ['name'], tables.StringAtom(itemsize=20), data)
 
     def write_clusterArray(self, topic_group, data):
-        return
+
+        cluster_dict = defaultdict(dict)
+        clusters = data['clusters']
+        dummy_obj = clusters[0][0] # Just grab a some random object
+        # Go through the supposed number of objects
+        for i in xrange(data['max_item']):
+
+            # Go through each timestamp of the objects
+            for cluster_array in clusters:
+
+                good_value = True
+                # Check to see if the object number exists
+                if i > len(cluster_array):
+                    good_value = False
+                    obj = dummy_obj
+                else:
+                    obj = cluster_array[i]
+                
+                # Go through the msg fields in the objects
+                for field in obj:
+
+                    # Check if field exists in the dictionary first
+                    if field not in cluster_dict[i]:
+                        cluster_dict[i][field] = []
+                    
+                    # Store NaNs if there was no object
+                    if good_value is False:
+                        dummy_vals = np.empty(np.shape(dummy_obj[field]))
+                        dummy_vals[:] = NAN
+                        cluster_dict[i][field].append(dummy_vals.tolist())
+                    else:
+                        cluster_dict[i][field].append(obj[field])
+
+        # populate the structure now
+        for i in xrange(data['max_item']):
+            single_obj = cluster_dict[i]
+            obj_group = self.h5file.createGroup(topic_group, 'object_'+str(i))
+            self.pytable_writer_helper(obj_group, single_obj.keys(), tables.Float64Atom(), single_obj)
 
     def write_cameraInfo(self, topic_group, data):
         return

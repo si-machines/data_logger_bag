@@ -25,12 +25,24 @@ def extract_data(one_run):
 
         # Pull out the data
         topic_data = eval('one_run.'+topic)
-
-        # Pull out fields for the topic
-        fields = [_v for _v in topic_data._v_leaves]
-       
-        for field in fields:
-            store_data[topic][field] = eval('topic_data.'+field+'[:]')
+        
+        # Put in special check for object_msg
+        if topic == 'c6_objects':
+            object_dict = defaultdict(dict)
+            # Pull out fields for the topic
+            obj_groups = [_v for _v in topic_data._v_groups]
+            for obj_group in obj_groups:
+                object_data = eval('topic_data.'+obj_group)
+                fields = [_v for _v in object_data._v_leaves]
+                for field in fields:
+                    object_dict[obj_group][field] = eval('object_data.'+field+'[:]')
+            store_data[topic] = object_dict
+        else:
+            # Pull out fields for the topic
+            fields = [_v for _v in topic_data._v_leaves]
+      
+            for field in fields:
+                store_data[topic][field] = eval('topic_data.'+field+'[:]')
 
     return store_data
 
