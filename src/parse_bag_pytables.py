@@ -32,13 +32,16 @@ class DataTableBag():
 
         # read paramater
         self.skip_topics = rospy.get_param("~skip_topics", default_skip_topics)
-        self.trigger_topic = rospy.get_param("~trigger_topic", default_trigger_topic)
         input_files = rospy.get_param("~input_files", "")
         self.output_filename = rospy.get_param("~output_file", "converted_data.h5")
+        # These need to be set if we want to subsample down to a topic
+        # Otherwise by default nothing is aligned
         self.num_joints = int(rospy.get_param("~num_joints", "57"))
+        self.sub_sample = rospy.get_param("~sub_sample_flag", False)
+        self.trigger_topic = rospy.get_param("~trigger_topic", default_trigger_topic)
 
         if input_files == "":
-            rospy.logerr("Usage: %s _input_files:=<input_files> \n Optional args:\n_output_file:=<output_file.h5>\n_skip_topics:=<ros topics to NOT parse>\n_trigger_topic:=<what ros topic to downsample to>\n_num_joint_states:=<num_joints>" % sys.argv[0])
+            rospy.logerr("Usage: %s _input_files:=<input_files> \n Optional args:\n_output_file:=<output_file.h5>\n_skip_topics:=<ros topics to NOT parse>\n_trigger_topic:=<what ros topic to downsample to>\n_sub_sample_flag:=<True or False>\n_num_joint_states:=<num_joints>" % sys.argv[0])
             sys.exit()
 
         # Expand wildcards if any
@@ -83,22 +86,19 @@ class DataTableBag():
             if not topics['topic'] in self.skip_topics:
                 self.all_topics.append(topics['topic']) 
                 self.topic_types[topics['topic']] = topics['type'] 
-                self.data_store[topics['topic']] = (self.create_dummy_msg(topics['topic']), 0)
 
-        # Number of entries
-        num_entries = 0
-        num_controller_entries = 0
+                # create dummy objects if we're subsampling
+                if self.sub_sample:
+                    self.data_store[topics['topic']] = (self.create_dummy_msg(topics['topic']), 0)
         
         # Go through the topics in the bag file
         for topic, msg, stamp in bag.read_messages(topics=self.all_topics):
-            num_entries += 1
 
             # Store off the topics not being downsampled
             self.data_store[topic] = (msg,stamp)
 
             # write off the values
-            if topic == self.trigger_topic:
-                num_controller_entries += 1
+            if topic == self.trigger_topic and self.sub_sample:
 
                 # Go through all of the topics we stored off and write them to
                 # a dictionary
@@ -108,6 +108,8 @@ class DataTableBag():
                     else: 
                         self.process_msg(topic_store, (self.data_store[topic_store][0], stamp))
 
+            else:
+                self.process_msg(topic, (msg, stamp))
        
     def process_msg(self, topic, data):
 
