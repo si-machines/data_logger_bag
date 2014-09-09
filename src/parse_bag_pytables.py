@@ -82,6 +82,7 @@ class DataTableBag():
             if not topics['topic'] in self.skip_topics:
                 self.all_topics.append(topics['topic']) 
                 self.topic_types[topics['topic']] = topics['type'] 
+                self.data_store[topics['topic']] = (self.create_dummy_msg(topics['topic']), 0)
 
         # Number of entries
         num_entries = 0
@@ -101,7 +102,10 @@ class DataTableBag():
                 # Go through all of the topics we stored off and write them to
                 # a dictionary
                 for topic_store in self.data_store:
-                    self.process_msg(topic_store, self.data_store[topic_store])
+                    if isinstance(self.data_store[topic_store], list):
+                        self.process_msg(topic_store, self.data_store[topic_store])
+                    else: 
+                        self.process_msg(topic_store, (self.data_store[topic_store][0], stamp))
 
        
     def process_msg(self, topic, data):
@@ -406,6 +410,77 @@ class DataTableBag():
             carray = self.h5file.createCArray(topic_group, field, data_type, data_size)
             carray[:] = data[field]
 
+    def create_dummy_msg(self, topic):
+
+        # Custom function that will process the messages depending on type
+        msg_type = self.topic_types[topic] 
+        obj = Object()
+
+        vec_obj = Object()
+        vec_obj.x = float('nan')
+        vec_obj.y = float('nan')
+        vec_obj.z = float('nan')
+
+        if msg_type == 'geometry_msgs/Wrench':
+            obj.force = vec_obj
+            obj.torque = vec_obj
+            return obj
+
+        elif msg_type == 'std_msgs/Int8':
+            obj.data = float('nan')
+            return obj
+
+        elif msg_type == 'sensor_msgs/JointState':
+            obj.name = ['no','joints']
+            obj.position = [float('nan'), float('nan')]
+            obj.velocity = [float('nan'), float('nan')]
+            obj.effort = [float('nan'), float('nan')]
+            return obj
+            
+        elif msg_type == 'rospcseg/ClusterArrayV0':
+            obj_clusters = Object()
+            obj_clusters.centroid = vec_obj
+            obj_clusters.aligned_bounding_box_size = vec_obj
+            color = Object()
+            color.r = float('nan')
+            color.g = float('nan')
+            color.b = float('nan')
+            color.a = float('nan')
+            
+            obj_clusters.rgba_color =  color
+            obj_clusters.volume2 = float('nan')
+            obj_clusters.bb_volume = float('nan')
+            obj_clusters.bb_area = float('nan')
+            obj_clusters.av_ratio = float('nan') 
+            obj_clusters.compactness = float('nan')
+            obj_clusters.aligned_bounding_box_center = vec_obj
+            obj_clusters.min = vec_obj
+            obj_clusters.max = vec_obj
+            obj.clusters = [obj_clusters]
+
+            return obj
+
+        elif msg_type == 'std_msgs/String':
+            obj.data = 'no_data'
+            return obj
+            
+        elif msg_type == 'data_logger_bag/LogControl':
+            obj.taskName = 'no task'
+            obj.actionType = 'no action'
+            obj.skillName = 'no skil;'
+            obj.topics = 'no topics'
+            obj.playback = False
+            return obj
+            
+        elif msg_type == 'std_msgs/Bool':
+            obj.data = False
+            return obj
+
+        else:
+            rospy.logerr("Message type: %s is not supported" % msg_type)
+
+class Object:
+    pass
 
 def main():
 
