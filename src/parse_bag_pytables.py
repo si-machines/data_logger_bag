@@ -189,7 +189,7 @@ class DataTableBag():
     def process_jointState(self, topic, msg, stamp):
 
         # Store the name only once
-        if 'name' not in self.all_data[topic]:
+        if 'name' not in self.all_data[topic] and hasattr(msg, 'header'):
             self.all_data[topic]['name'] = msg.name
 
         # Store all of the timestamps by seconds from msg
