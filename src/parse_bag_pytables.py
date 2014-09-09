@@ -35,9 +35,10 @@ class DataTableBag():
         self.trigger_topic = rospy.get_param("~trigger_topic", default_trigger_topic)
         input_files = rospy.get_param("~input_files", "")
         self.output_filename = rospy.get_param("~output_file", "converted_data.h5")
+        self.num_joints = int(rospy.get_param("~num_joints", "57"))
 
         if input_files == "":
-            rospy.logerr("Usage: %s _input_files:=<input_files> \n Optional args:\n_output_file:=<output_file.h5>\n_skip_topics:=<ros topics to NOT parse>\n_trigger_topic:=<what ros topic to downsample to>" % sys.argv[0])
+            rospy.logerr("Usage: %s _input_files:=<input_files> \n Optional args:\n_output_file:=<output_file.h5>\n_skip_topics:=<ros topics to NOT parse>\n_trigger_topic:=<what ros topic to downsample to>\n_num_joint_states:=<num_joints>" % sys.argv[0])
             sys.exit()
 
         # Expand wildcards if any
@@ -124,7 +125,7 @@ class DataTableBag():
         elif msg_type == 'sensor_msgs/JointState':
             # We only pass in the msg and not the timestamp because the msg itself has
             # a time stamp in the header
-            self.process_jointState(topic, msg)
+            self.process_jointState(topic, msg, stamp)
             
         elif msg_type == 'rospcseg/ClusterArrayV0':
             self.process_clusterArray(topic, msg, stamp)
@@ -185,7 +186,7 @@ class DataTableBag():
 
         self.all_data[topic]['time'].append(stamp.to_sec())
 
-    def process_jointState(self, topic, msg):
+    def process_jointState(self, topic, msg, stamp):
 
         # Store the name only once
         if 'name' not in self.all_data[topic]:
@@ -194,8 +195,12 @@ class DataTableBag():
         # Store all of the timestamps by seconds from msg
         if 'time' not in self.all_data[topic]:
             self.all_data[topic]['time'] = []
-        self.all_data[topic]['time'].append(msg.header.stamp.to_sec())
 
+        if hasattr(msg, 'header'):
+            self.all_data[topic]['time'].append(msg.header.stamp.to_sec())
+        else:
+            self.all_data[topic]['time'].append(stamp.to_sec())
+            
         # Go through the actual fields of the msg and populate
         msg_fields = ['position','velocity','effort']
         for msg_field in msg_fields:
@@ -356,7 +361,7 @@ class DataTableBag():
 
                 good_value = True
                 # Check to see if the object number exists
-                if i > len(cluster_array):
+                if i >= len(cluster_array):
                     good_value = False
                     obj = dummy_obj
                 else:
@@ -371,9 +376,13 @@ class DataTableBag():
                     
                     # Store NaNs if there was no object
                     if good_value is False:
-                        dummy_vals = np.empty(np.shape(dummy_obj[field]))
-                        dummy_vals[:] = NAN
-                        cluster_dict[i][field].append(dummy_vals.tolist())
+                        if isinstance(dummy_obj[field],float):
+                            dummy_vals = np.nan
+                            cluster_dict[i][field].append(dummy_vals)
+                        else:
+                            dummy_vals = np.empty(np.shape(dummy_obj[field]))
+                            dummy_vals[:] = np.nan
+                            cluster_dict[i][field].append(dummy_vals.tolist())
                     else:
                         cluster_dict[i][field].append(obj[field])
 
@@ -420,6 +429,7 @@ class DataTableBag():
         vec_obj.x = float('nan')
         vec_obj.y = float('nan')
         vec_obj.z = float('nan')
+        vec_obj._type = 'geometry_msgs/Vector3'
 
         if msg_type == 'geometry_msgs/Wrench':
             obj.force = vec_obj
@@ -431,10 +441,10 @@ class DataTableBag():
             return obj
 
         elif msg_type == 'sensor_msgs/JointState':
-            obj.name = ['no','joints']
-            obj.position = [float('nan'), float('nan')]
-            obj.velocity = [float('nan'), float('nan')]
-            obj.effort = [float('nan'), float('nan')]
+            obj.name = ['no_joints'] * self.num_joints
+            obj.position = [float('nan')]* self.num_joints
+            obj.velocity = [float('nan')]* self.num_joints
+            obj.effort = [float('nan')]* self.num_joints
             return obj
             
         elif msg_type == 'rospcseg/ClusterArrayV0':
@@ -446,7 +456,7 @@ class DataTableBag():
             color.g = float('nan')
             color.b = float('nan')
             color.a = float('nan')
-            
+            color._type = 'std_msgs/ColorRGBA'
             obj_clusters.rgba_color =  color
             obj_clusters.volume2 = float('nan')
             obj_clusters.bb_volume = float('nan')
@@ -457,7 +467,6 @@ class DataTableBag():
             obj_clusters.min = vec_obj
             obj_clusters.max = vec_obj
             obj.clusters = [obj_clusters]
-
             return obj
 
         elif msg_type == 'std_msgs/String':
