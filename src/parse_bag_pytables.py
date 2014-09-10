@@ -33,7 +33,8 @@ class DataTableBag():
         # read paramater
         self.skip_topics = rospy.get_param("~skip_topics", default_skip_topics)
         input_files = rospy.get_param("~input_files", "")
-        self.output_filename = rospy.get_param("~output_file", "converted_data.h5")
+        output_file = rospy.get_param("~output_file", "converted_data.h5")
+
         # These need to be set if we want to subsample down to a topic
         # Otherwise by default nothing is aligned
         self.num_joints = int(rospy.get_param("~num_joints", "57"))
@@ -46,6 +47,7 @@ class DataTableBag():
 
         # Expand wildcards if any
         self.input_filenames = glob.glob(os.path.expanduser(input_files))
+        self.output_filename = os.path.expanduser(output_file)
 
         # Initialize some variables that might be needed
         self.fileCounter = 0 
@@ -98,15 +100,16 @@ class DataTableBag():
             self.data_store[topic] = (msg,stamp)
 
             # write off the values
-            if topic == self.trigger_topic and self.sub_sample:
+            if self.sub_sample:
+                if topic == self.trigger_topic:
 
-                # Go through all of the topics we stored off and write them to
-                # a dictionary
-                for topic_store in self.data_store:
-                    if isinstance(self.data_store[topic_store], list):
-                        self.process_msg(topic_store, self.data_store[topic_store])
-                    else: 
-                        self.process_msg(topic_store, (self.data_store[topic_store][0], stamp))
+                    # Go through all of the topics we stored off and write them to
+                    # a dictionary
+                    for topic_store in self.data_store:
+                        if isinstance(self.data_store[topic_store], list):
+                            self.process_msg(topic_store, self.data_store[topic_store])
+                        else: 
+                            self.process_msg(topic_store, (self.data_store[topic_store][0], stamp))
 
             else:
                 self.process_msg(topic, (msg, stamp))
