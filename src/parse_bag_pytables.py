@@ -13,7 +13,7 @@ import glob
 from collections import defaultdict
 import numpy as np
 
-#from geometry_msgs.msg import Pose2D, Wrench, Vector3, Point, Pose
+from geometry_msgs.msg import Pose2D, Wrench, Vector3, Point, Pose
 #from std_msgs.msg import String, Int8, Float32MultiArray
 #from sensor_msgs.msg import JointState
 #from pcseg_msgs.msg import ClusterArrayV0
@@ -92,10 +92,10 @@ class DataTableBag():
                 # create dummy objects if we're subsampling
                 if self.sub_sample:
                     self.data_store[topics['topic']] = (self.create_dummy_msg(topics['topic']), 0)
-        
+
         # Go through the topics in the bag file
         for topic, msg, stamp in bag.read_messages(topics=self.all_topics):
-
+            
             # Store off the topics not being downsampled
             self.data_store[topic] = (msg,stamp)
 
@@ -113,7 +113,7 @@ class DataTableBag():
 
             else:
                 self.process_msg(topic, (msg, stamp))
-       
+
     def process_msg(self, topic, data):
 
         # Custom function that will process the messages depending on type
@@ -143,6 +143,9 @@ class DataTableBag():
             
         elif msg_type == 'data_logger_bag/LogControl':
             self.process_logControl(topic, msg, stamp)
+
+        elif msg_type == 'geometry_msgs/Pose2D':
+            self.process_pose2D(topic, msg, stamp)
             
         elif msg_type == 'std_msgs/Bool':
             self.process_bool(topic, msg, stamp)
@@ -281,6 +284,11 @@ class DataTableBag():
             self.all_data[topic]['time'] = []
         self.all_data[topic]['time'].append(stamp.to_sec())
 
+    def process_pose2D(self, topic, msg, stamp):
+
+        # It is the same as logControl
+        self.process_logControl(topic, msg, stamp)
+
     def process_bool(self, topic, msg, stamp):
 
         # It is currently the same for this type
@@ -330,6 +338,9 @@ class DataTableBag():
                 
             elif msg_type == 'data_logger_bag/LogControl':
                 self.write_logControl(topic_group, data)
+
+            elif msg_type == 'geometry_msgs/Pose2D':
+                self.write_pose2D(topic_group, data)
 
             elif msg_type == 'std_msgs/Bool':
                 self.write_bool(topic_group, data)
@@ -411,6 +422,11 @@ class DataTableBag():
         self.pytable_writer_helper(topic_group, fields, tables.StringAtom(itemsize=20), data)
         self.pytable_writer_helper(topic_group, ['playback'], tables.BoolAtom(), data)
 
+    def write_pose2D(self, topic_group, data):
+
+        fields = ['x', 'y', 'theta', 'time']
+        self.pytable_writer_helper(topic_group, fields, tables.Float64Atom(), data)
+
     def write_bool(self, topic_group, data):
 
         self.pytable_writer_helper(topic_group, ['data'], tables.BoolAtom(), data)
@@ -488,6 +504,12 @@ class DataTableBag():
             
         elif msg_type == 'std_msgs/Bool':
             obj.data = False
+            return obj
+
+        elif msg_type == 'geometry_msgs/Pose2D':
+            obj.x = float('nan')
+            obj.y = float('nan')
+            obj.theta = float('nan')
             return obj
 
         else:
