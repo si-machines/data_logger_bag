@@ -42,7 +42,7 @@ class DataTableBag():
         self.trigger_topic = rospy.get_param("~trigger_topic", default_trigger_topic)
 
         if input_files == "":
-            rospy.logerr("Usage: %s _input_files:=<input_files> \n Optional args:\n_output_file:=<output_file.h5>\n_skip_topics:=<ros topics to NOT parse>\n_trigger_topic:=<what ros topic to downsample to>\n_sub_sample_flag:=<True or False>\n_num_joint_states:=<num_joints>" % sys.argv[0])
+            rospy.logerr("Usage: %s _input_files:=<input_files> \n Optional args:\n_output_file:=<output_file.h5>\n_skip_topics:=<ros topics to NOT parse>\n_trigger_topic:=<what ros topic to downsample to>\n_sub_sample_flag:=<True or False>\n_num_joints:=<num_joints>" % sys.argv[0])
             sys.exit()
 
         # Expand wildcards if any
