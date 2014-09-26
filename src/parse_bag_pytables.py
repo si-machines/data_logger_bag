@@ -18,108 +18,22 @@ from geometry_msgs.msg import Pose2D, Wrench, Vector3, Point, Pose
 #from sensor_msgs.msg import JointState
 #from pcseg_msgs.msg import ClusterArrayV0
 
-class DataTableBag():
-
+class TableBagData():
+    '''
+    Class that actually stores the data away for later use
+    '''
     def __init__(self):
 
-        # Intialize the node
-        rospy.init_node("bag_parser", anonymous=True)
-        rospy.loginfo("Initializing bag parser")
-       
-        # Default topics to skip and subsample to
-        default_skip_topics = "camera/depth_registered/image_raw camera/rgb/image_raw c6_end_effect_pose_right c6_end_effect_pose_left"
-        default_trigger_topic = "C6_FSM_state"
-
-        # read paramater
-        self.skip_topics = rospy.get_param("~skip_topics", default_skip_topics)
-        input_files = rospy.get_param("~input_files", "")
-        output_file = rospy.get_param("~output_file", "converted_data.h5")
-
-        # These need to be set if we want to subsample down to a topic
-        # Otherwise by default nothing is aligned
-        self.num_joints = int(rospy.get_param("~num_joints", "57"))
-        self.sub_sample = rospy.get_param("~sub_sample_flag", False)
-        self.trigger_topic = rospy.get_param("~trigger_topic", default_trigger_topic)
-
-        if input_files == "":
-            rospy.logerr("Usage: %s _input_files:=<input_files> \n Optional args:\n_output_file:=<output_file.h5>\n_skip_topics:=<ros topics to NOT parse>\n_trigger_topic:=<what ros topic to downsample to>\n_sub_sample_flag:=<True or False>\n_num_joints:=<num_joints>" % sys.argv[0])
-            sys.exit()
-
-        # Expand wildcards if any
-        self.input_filenames = glob.glob(os.path.expanduser(input_files))
-        self.output_filename = os.path.expanduser(output_file)
-
-        # Initialize some variables that might be needed
-        self.fileCounter = 0 
-        
-    def setup_h5(self):
-
-        filters = tables.Filters(complevel=9)
-        self.h5file = tables.openFile(self.output_filename, mode="w", title="Aggregated Exploration Data",
-                                 filters = filters)
-
-        rospy.loginfo("Initialized h5 output file")
-
-    def process_files(self):
-
-        for filename in self.input_filenames:
-
-            # Go through each file
-            self.process_bag(filename)
-            self.write_pytables(filename)
-            self.fileCounter +=1
-
-    def process_bag(self, filename):
-
-        rospy.loginfo("Processing bag: %s" % filename)
-        bag = rosbag.Bag(filename)
-
-        # Initialize variables
-        self.all_topics = []
-        self.topic_types = dict()
-        self.data_store = dict()
         self.all_data = defaultdict(dict)
-
-        # Open up the bag file and get info on it
-        info_dict = yaml.load(subprocess.Popen(['rosbag', 'info', '--yaml', filename], stdout=subprocess.PIPE).communicate()[0])
-
-        # Go through each of the topics and initialize variables
-        for topics in info_dict['topics']:
-            if not topics['topic'] in self.skip_topics:
-                self.all_topics.append(topics['topic']) 
-                self.topic_types[topics['topic']] = topics['type'] 
-
-                # create dummy objects if we're subsampling
-                if self.sub_sample:
-                    self.data_store[topics['topic']] = (self.create_dummy_msg(topics['topic']), 0)
-
-        # Go through the topics in the bag file
-        for topic, msg, stamp in bag.read_messages(topics=self.all_topics):
-            
-            # Store off the topics not being downsampled
-            self.data_store[topic] = (msg,stamp)
-
-            # write off the values
-            if self.sub_sample:
-                if topic == self.trigger_topic:
-
-                    # Go through all of the topics we stored off and write them to
-                    # a dictionary
-                    for topic_store in self.data_store:
-                        if isinstance(self.data_store[topic_store], list):
-                            self.process_msg(topic_store, self.data_store[topic_store])
-                        else: 
-                            self.process_msg(topic_store, (self.data_store[topic_store][0], stamp))
-
-            else:
-                self.process_msg(topic, (msg, stamp))
+        self.topic_types = dict()
 
     def process_msg(self, topic, data):
 
         # Custom function that will process the messages depending on type
-        msg_type = self.topic_types[topic] 
+        #msg_type = self.topic_types[topic] 
         msg = data[0]
         stamp = data[1]
+        msg_type = msg._type
 
         if msg_type == 'geometry_msgs/Wrench':
             self.process_wrench(topic, msg, stamp)
@@ -294,7 +208,7 @@ class DataTableBag():
         # It is currently the same for this type
         self.process_int8(topic, msg, stamp)
 
-    def write_pytables(self, filename):
+    def write_pytables(self, filename, fileCounter):
 
         # Setup the pytable names
         '''
@@ -305,7 +219,7 @@ class DataTableBag():
         path_name = os.path.split(group_name) # Split filepath from filename
         group_name = path_name[1] + '_'+path_name[0].split("/")[-1]
         #group_name = group_name+'_'+str(fileCounter) # Add simple counter for ID purposes later
-        group_name = "exploration_"+path_name[0].split("/")[-1]+"_"+str(self.fileCounter) 
+        group_name = "exploration_"+path_name[0].split("/")[-1]+"_"+str(fileCounter) 
         
         rospy.loginfo("Writing file: %s to pytable" % path_name[1])
 
@@ -440,10 +354,111 @@ class DataTableBag():
             carray = self.h5file.createCArray(topic_group, field, data_type, data_size)
             carray[:] = data[field]
 
+
+class DataTableBagProcessor():
+
+    def __init__(self):
+
+        # Intialize the node
+        rospy.init_node("bag_parser", anonymous=True)
+        rospy.loginfo("Initializing bag parser")
+       
+        # Default topics to skip and subsample to
+        default_skip_topics = "camera/depth_registered/image_raw camera/rgb/image_raw c6_end_effect_pose_right c6_end_effect_pose_left"
+        default_trigger_topic = "C6_FSM_state"
+
+        # read paramater
+        self.skip_topics = rospy.get_param("~skip_topics", default_skip_topics)
+        input_files = rospy.get_param("~input_files", "")
+        output_file = rospy.get_param("~output_file", "converted_data.h5")
+
+        # These need to be set if we want to subsample down to a topic
+        # Otherwise by default nothing is aligned
+        self.num_joints = int(rospy.get_param("~num_joints", "57"))
+        self.sub_sample = rospy.get_param("~sub_sample_flag", False)
+        self.trigger_topic = rospy.get_param("~trigger_topic", default_trigger_topic)
+
+        if input_files == "":
+            rospy.logerr("Usage: %s _input_files:=<input_files> \n Optional args:\n_output_file:=<output_file.h5>\n_skip_topics:=<ros topics to NOT parse>\n_trigger_topic:=<what ros topic to downsample to>\n_sub_sample_flag:=<True or False>\n_num_joints:=<num_joints>" % sys.argv[0])
+            sys.exit()
+
+        # Expand wildcards if any
+        self.input_filenames = glob.glob(os.path.expanduser(input_files))
+        self.output_filename = os.path.expanduser(output_file)
+
+        # Initialize some variables that might be needed
+        self.fileCounter = 0 
+       
+    def setup_h5(self):
+
+        filters = tables.Filters(complevel=9)
+        self.h5file = tables.openFile(self.output_filename, mode="w", title="Aggregated Exploration Data",
+                                 filters = filters)
+
+        rospy.loginfo("Initialized h5 output file")
+
+    def process_files(self):
+
+        for filename in self.input_filenames:
+
+            # Go through each file
+            self.process_bag(filename)
+            self.bagData.write_pytables(filename, self.fileCounter)
+            self.fileCounter +=1
+
+    def process_bag(self, filename):
+
+        rospy.loginfo("Processing bag: %s" % filename)
+        bag = rosbag.Bag(filename)
+
+        # Create an data object to store
+        self.bagData = TableBagData()
+        self.bagData.h5file = self.h5file
+
+        # Initialize variables
+        self.all_topics = []
+        #self.topic_types = dict()
+        self.data_store = dict()
+        self.bagData.topic_types = dict()
+
+        # Open up the bag file and get info on it
+        info_dict = yaml.load(subprocess.Popen(['rosbag', 'info', '--yaml', filename], stdout=subprocess.PIPE).communicate()[0])
+
+        # Go through each of the topics and initialize variables
+        for topics in info_dict['topics']:
+            if not topics['topic'] in self.skip_topics:
+                self.all_topics.append(topics['topic']) 
+                self.bagData.topic_types[topics['topic']] = topics['type'] 
+
+                # create dummy objects if we're subsampling
+                if self.sub_sample:
+                    self.data_store[topics['topic']] = (self.create_dummy_msg(topics['topic']), 0)
+
+        # Go through the topics in the bag file
+        for topic, msg, stamp in bag.read_messages(topics=self.all_topics):
+            
+            # Store off the topics not being downsampled
+            self.data_store[topic] = (msg,stamp)
+
+            # write off the values
+            if self.sub_sample:
+                if topic == self.trigger_topic:
+
+                    # Go through all of the topics we stored off and write them to
+                    # a dictionary
+                    for topic_store in self.data_store:
+                        if isinstance(self.data_store[topic_store], list):
+                            self.bagData.process_msg(topic_store, self.data_store[topic_store])
+                        else: 
+                            self.bagData.process_msg(topic_store, (self.data_store[topic_store][0], stamp))
+
+            else:
+                self.bagData.process_msg(topic, (msg, stamp))
+
     def create_dummy_msg(self, topic):
 
         # Custom function that will process the messages depending on type
-        msg_type = self.topic_types[topic] 
+        msg_type = self.bagData.topic_types[topic] 
         obj = Object()
 
         vec_obj = Object()
@@ -521,7 +536,7 @@ class Object:
 def main():
 
     # Create DataTableBag object
-    data = DataTableBag()
+    data = DataTableBagProcessor()
 
     # Open up h5 file to write
     data.setup_h5()
