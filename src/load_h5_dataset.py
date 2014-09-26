@@ -77,6 +77,9 @@ def load_data(input_filename, output_filename, save_to_file):
         file_ptr = open(output_filename, "w")
         cPickle.dump(stored_data, file_ptr, cPickle.HIGHEST_PROTOCOL)
         file_ptr.close()
+   
+    # Close the h5 file
+    all_data.close()
 
     return stored_data
 
