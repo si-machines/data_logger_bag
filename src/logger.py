@@ -42,7 +42,10 @@ class BagDataLogger:
 
         # Append the task and skill onto the data_location
         self.data_custom_location = os.path.join(self.data_location, self.task, self.skill)
-        
+
+        # Setup publisher for bagfile
+        self.bag_file_loc_pub = rospy.Publisher('bag_file_loc', String)
+
         rospy.loginfo("Initialized data logger node")
 
     '''
@@ -130,15 +133,15 @@ class BagDataLogger:
     
         rospy.loginfo("Set up bag file to write to")
         filename = self.data_prefix + "_"+time.strftime("%Y-%m-%dT%H%M%S") + ".bag"
-        datapath = os.path.join(os.path.expanduser("~"),self.data_custom_location, filename)
+        self.datapath = os.path.join(os.path.expanduser("~"),self.data_custom_location, filename)
         #rospy.loginfo("File name is: %s" % datapath)
         
         # Check if directory exists
-        self.ensure_dir(datapath)
+        self.ensure_dir(self.datapath)
        
         # Setup the command for rosbag
         # We don't use the compression flag (-j) to avoid slow downs
-        rosbag_cmd = " ".join(("rosbag record -O",datapath,self.record_topics))
+        rosbag_cmd = " ".join(("rosbag record -O",self.datapath,self.record_topics))
         rospy.loginfo("Command to run: %s" % rosbag_cmd)
 
         # Start the command through the system
@@ -154,6 +157,9 @@ class BagDataLogger:
 
         # Kill all extra rosbag "record" nodes
         self.terminate_ros_node("/record")
+
+        # Publish out what bag file that we finished reccording to
+        self.bag_file_loc_pub.publish(String(self.datapath))
 
     '''
     Useful function from ROS answers that kills all nodes with the string match
