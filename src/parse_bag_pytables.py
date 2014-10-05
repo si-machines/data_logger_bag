@@ -143,11 +143,20 @@ class DataTableBagProcessor():
             obj.data = float('nan')
             return obj
 
+        # This is a simple hack the determine how many states
+        # Be aware that joint_states might not actually have 57 states
         elif msg_type == 'sensor_msgs/JointState':
-            obj.name = ['no_joints'] * self.num_joints
-            obj.position = [float('nan')]* self.num_joints
-            obj.velocity = [float('nan')]* self.num_joints
-            obj.effort = [float('nan')]* self.num_joints
+            if topic == 'joint_states':
+                num_joint = 57
+            elif topic == 'zlift_state':
+                num_joint = 1
+            else:
+                num_joint = 36
+
+            obj.name = ['no_joints'] * num_joint
+            obj.position = [float('nan')]* num_joint
+            obj.velocity = [float('nan')]* num_joint
+            obj.effort = [float('nan')]* num_joint
             return obj
             
         elif msg_type == 'rospcseg/ClusterArrayV0':
