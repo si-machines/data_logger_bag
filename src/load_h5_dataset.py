@@ -10,10 +10,66 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 
 
+def table_pull_data(group_data):
+
+    group_data_dict = dict()
+
+    # Pull out fields for the topic
+    fields = [_v for _v in group_data._v_leaves]
+
+    for field in fields:
+        group_data[field] = eval('group_data.'+field+'[:]')
+
+    return group_data_dict
+
+
+def pull_groups(group_data, group_name):
+
+    # Pull out all group names if exists
+    group_fields = [_v for _v in group_data._v_groups]
+    
+    if len(group_fields) > 0:
+       
+        group_data_dict = dict()
+        for new_group_name in group_fields: 
+
+            new_group_data = eval('group_data.'+new_group_name)
+            group_data_dict[new_group_name] = pull_groups(new_group_data, new_group_name) 
+   
+    # Base case where we stop and store if we no longer have groups left          
+    else:
+        
+        node_dict = dict() 
+        # Pull out fields for the topic
+        fields = [_v for _v in group_data._v_leaves]
+
+        for field in fields:
+            node_dict[field] = eval('group_data.'+field+'[:]')
+        
+        return node_dict 
+
+    return group_data_dict
+
 def extract_data(one_run):
     '''
     Pulls out the data we want from a single run
     '''
+
+    # Create a dictionary to store all of the run
+    store_data = defaultdict(dict)
+
+    # pull out the topics
+    data_topics = [_v for _v in one_run._v_groups]
+
+    for topic in data_topics:
+
+        # Pull out the data
+        topic_data = eval('one_run.'+topic)
+        store_data[topic] = pull_groups(topic_data, topic)
+
+    return store_data
+
+def old_extract_data(one_run):
 
     # Create a dictionary to store all of the run
     store_data = defaultdict(dict)
@@ -38,6 +94,7 @@ def extract_data(one_run):
                     object_dict[obj_group][field] = eval('object_data.'+field+'[:]')
             store_data[topic] = object_dict
         else:
+
             # Pull out fields for the topic
             fields = [_v for _v in topic_data._v_leaves]
       
@@ -45,6 +102,8 @@ def extract_data(one_run):
                 store_data[topic][field] = eval('topic_data.'+field+'[:]')
 
     return store_data
+
+
 
 def load_data(input_filename, output_filename, save_to_file):
 
