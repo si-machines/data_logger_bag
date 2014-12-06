@@ -58,6 +58,10 @@ class DataTableBagProcessor():
             file_split = input_files.split(os.sep)
             self.output_filename = "-".join(file_split[-3:-1])+'.h5'
 
+        if self.sub_sample:
+            self.output_filename = self.output_filename.split('.')[0] + '_subsampled.h5'
+            rospy.loginfo("WARNING: subsample topic is %s. Make sure this is your state..." % self.trigger_topic)
+
         # Initialize some variables that might be needed
         self.fileCounter = 0 
        
