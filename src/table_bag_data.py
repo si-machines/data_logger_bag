@@ -76,11 +76,19 @@ class TableBagData():
                 
             elif msg_type == 'std_msgs/Bool':
                 self.process_bool(topic, msg, stamp)
+
+            elif msg_type == 'audio_tracking/AudioData16':
+                # Same message structure as Int8
+                self.process_int8(topic, msg, stamp)
+
+            elif msg_type == 'gait_capture/PersonFrame':
+                self.process_gait(topic, msg, stamp)
+
             else:
                 rospy.logerr("Message type: %s is not supported" % msg_type)
 
         except:
-            rospy.logerr("Message type: %s is not supported" % topic)
+            rospy.logerr("Error processing topic: %s " % topic)
 
     def msg_field_helper(self, msg):
         '''
@@ -122,6 +130,51 @@ class TableBagData():
             self.all_data[topic]['time'] = []
 
         self.all_data[topic]['time'].append(stamp.to_sec())
+
+    def process_gait(self, topic, msg, stamp):
+     
+        # Pull out person ID 
+        ID = msg.person_id
+
+        # Check if nan...
+        if np.isnan(ID):
+            rospy.logerr("skipping nan person... Possible misalignment with gait") 
+            return
+
+        if ID not in self.all_data[topic]:
+            self.all_data[topic][ID] = dict()
+
+        if 'body_parts' not in self.all_data[topic][ID]:
+            self.all_data[topic][ID]['body_parts'] = dict()
+
+        time_fields = ['latest_time','time']
+        for field in time_fields:
+            if field not in self.all_data[topic][ID]:
+                self.all_data[topic][ID][field] = []
+
+        self.all_data[topic][ID]['time'].append(stamp.to_sec())
+        self.all_data[topic][ID]['latest_time'].append(msg.latest_time.to_sec())
+
+        # Parse the body parts and store
+        data_fields = ['rotation','translation']
+        for body_part in msg.body_parts:
+
+            body_part_name = '_'.join(body_part.child_frame_id.split('_')[0:-1])[1::]
+
+            # Check if the body part exists first
+            if body_part_name not in self.all_data[topic][ID]['body_parts']:
+                self.all_data[topic][ID]['body_parts'][body_part_name] = dict()
+                self.all_data[topic][ID]['body_parts'][body_part_name]['rotation'] = []
+                self.all_data[topic][ID]['body_parts'][body_part_name]['translation'] = []
+
+            for field in data_fields: 
+                data_store = []
+                data_store.append(eval('body_part.transform.'+field+'.x'))
+                data_store.append(eval('body_part.transform.'+field+'.y'))
+                data_store.append(eval('body_part.transform.'+field+'.z'))
+
+                # Put into dictionary 
+                self.all_data[topic][ID]['body_parts'][body_part_name][field].append(data_store)
 
     def process_jointState(self, topic, msg, stamp):
 
@@ -273,7 +326,13 @@ class TableBagData():
 
             elif msg_type == 'std_msgs/Bool':
                 self.write_bool(topic_group, data)
+
+            elif msg_type == 'gait_capture/PersonFrame':
+                self.write_gait(topic_group, data)
                 
+            elif msg_type == 'audio_tracking/AudioData16':
+                self.write_int8(topic_group, data)
+
             else:
                 rospy.logerr("Message type: %s is not supported" % msg_type)
         
@@ -292,6 +351,26 @@ class TableBagData():
         fields = ['position', 'velocity', 'effort', 'time']
         self.pytable_writer_helper(topic_group, fields, tables.Float64Atom(), data)
         self.pytable_writer_helper(topic_group, ['name'], tables.StringAtom(itemsize=20), data)
+
+    def write_gait(self, topic_group, data):
+
+        fields = ['time','latest_time']
+        for person_id in data:
+            # Create a new group for each person
+            person_group = self.h5file.createGroup(topic_group, 'user0'+str(person_id))
+          
+            # Write off time information
+            self.pytable_writer_helper(person_group, fields, tables.Float64Atom(), data[person_id])
+       
+            # Create group for each body part 
+            for body_part_name in data[person_id]['body_parts']:
+                # Pull out data
+                body_part_data = data[person_id]['body_parts'][body_part_name]
+                body_part_group = self.h5file.createGroup(person_group, body_part_name)
+
+                # Write off the transform information
+                self.pytable_writer_helper(body_part_group, body_part_data.keys(), tables.Float64Atom(), body_part_data)
+
 
     def write_clusterArray(self, topic_group, data):
 

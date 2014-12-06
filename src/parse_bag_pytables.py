@@ -30,13 +30,14 @@ class DataTableBagProcessor():
         rospy.loginfo("Initializing bag parser")
        
         # Default topics to skip and subsample to
-        default_skip_topics = "camera/depth_registered/image_raw camera/rgb/image_raw c6_end_effect_pose_right c6_end_effect_pose_left"
+        default_skip_topics = "camera/depth_registered/image_raw camera/rgb/image_raw c6_end_effect_pose_right c6_end_effect_pose_left camera/rgb/camera_info camera/depth_registered/camera_info"
         default_trigger_topic = "C6_FSM_state"
 
         # read paramater
         self.skip_topics = rospy.get_param("~skip_topics", default_skip_topics)
         input_files = rospy.get_param("~input_files", "")
         output_file = rospy.get_param("~output_file", "converted_data.h5")
+        output_file_flag = rospy.get_param("~dir_outfile_flag", False)
 
         # These need to be set if we want to subsample down to a topic
         # Otherwise by default nothing is aligned
@@ -45,12 +46,17 @@ class DataTableBagProcessor():
         self.trigger_topic = rospy.get_param("~trigger_topic", default_trigger_topic)
 
         if input_files == "":
-            rospy.logerr("Usage: %s _input_files:=<input_files> \n Optional args:\n_output_file:=<output_file.h5>\n_skip_topics:=<ros topics to NOT parse>\n_trigger_topic:=<what ros topic to downsample to>\n_sub_sample_flag:=<True or False>\n_num_joints:=<num_joints>" % sys.argv[0])
+            rospy.logerr("Usage: %s _input_files:=<input_files> \n Optional args:\n_output_file:=<output_file.h5>\n_skip_topics:=<ros topics to NOT parse>\n_trigger_topic:=<what ros topic to downsample to>\n_sub_sample_flag:=<True or False>\n_num_joints:=<num_joints>\n_dir_outfile_flag:=<True or False>" % sys.argv[0])
             sys.exit()
 
         # Expand wildcards if any
         self.input_filenames = glob.glob(os.path.expanduser(input_files))
         self.output_filename = os.path.expanduser(output_file)
+
+        if output_file_flag:
+            # Setup output file names with directory format
+            file_split = input_files.split(os.sep)
+            self.output_filename = "-".join(file_split[-3:-1])+'.h5'
 
         # Initialize some variables that might be needed
         self.fileCounter = 0 
@@ -201,6 +207,16 @@ class DataTableBagProcessor():
             obj.x = float('nan')
             obj.y = float('nan')
             obj.theta = float('nan')
+            return obj
+
+        elif msg_type == 'audio_tracking/AudioData16':
+            obj.data = [float('nan')]*2048
+            return obj
+
+        elif msg_type == 'gait_capture/PersonFrame':
+            obj.person_id = float('nan')
+            obj.latest_time = float('nan')
+            obj.body_parts = []
             return obj
 
         else:
