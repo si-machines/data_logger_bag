@@ -49,18 +49,29 @@ class DataTableBagProcessor():
             rospy.logerr("Usage: %s _input_files:=<input_files> \n Optional args:\n_output_file:=<output_file.h5>\n_skip_topics:=<ros topics to NOT parse>\n_trigger_topic:=<what ros topic to downsample to>\n_sub_sample_flag:=<True or False>\n_num_joints:=<num_joints>\n_dir_outfile_flag:=<True or False>" % sys.argv[0])
             sys.exit()
 
-        # Expand wildcards if any
-        self.input_filenames = glob.glob(os.path.expanduser(input_files))
+        # Check if we passed in a directory
+        if os.path.isdir(input_files):
+            self.input_filenames = input_files
+            self.directory = True
+        else:
+            # Expand wildcards if any
+            self.input_filenames = glob.glob(os.path.expanduser(input_files))
+            self.directory = False
+
         self.output_filename = os.path.expanduser(output_file)
 
         if output_file_flag:
             # Setup output file names with directory format
             file_split = input_files.split(os.sep)
-            self.output_filename = "-".join(file_split[-3:-1])+'.h5'
+            if self.directory:
+                self.output_filename = file_split[-1]+'.h5'
+            else:            
+                self.output_filename = "-".join(file_split[-3:-1])+'.h5'
+            rospy.loginfo("Output file name is: %s" % self.output_filename)
 
         if self.sub_sample:
             self.output_filename = self.output_filename.split('.')[0] + '_subsampled.h5'
-            rospy.loginfo("WARNING: subsample topic is %s. Make sure this is your state..." % self.trigger_topic)
+            rospy.logwarn("WARNING: subsample topic is %s. Make sure this is your state..." % self.trigger_topic)
 
         # Initialize some variables that might be needed
         self.fileCounter = 0 
@@ -73,14 +84,47 @@ class DataTableBagProcessor():
 
         rospy.loginfo("Initialized h5 output file")
 
-    def process_files(self):
+    def process_all(self):
+        if (self.directory):
 
-        for filename in self.input_filenames:
+            # Create a bag root with the root dir
+            root_dir_name = os.path.split(self.input_filenames)[-1]
+            root_group = self.h5file.createGroup("/", root_dir_name) 
+
+            # Currently assume top level... (3 levels in)
+            for exp_type_dir in os.listdir(self.input_filenames):
+                exp_type_loc = os.path.join(self.input_filenames,exp_type_dir)
+                exp_type_group = self.h5file.createGroup(root_group, exp_type_dir)                
+
+                # Go through all the users
+                for user in os.listdir(exp_type_loc):
+                    user_loc = os.path.join(exp_type_loc, user)
+                    self.bag_group = self.h5file.createGroup(exp_type_group, user)                
+                    
+                    # for all files finally
+                    filenames = []
+                    for f in os.listdir(user_loc):
+
+                        if f.endswith(".bag"):
+                            filename = os.path.join(user_loc, f)
+                            filenames.append(filename)
+                    self.process_files(filenames)
+
+        else:
+            
+            self.process_files(self.input_filenames)
+
+    def process_files(self, input_files):
+
+        # Reset the count per directory
+        self.fileCounter = 1
+        for filename in input_files:
 
             # Go through each file
             self.process_bag(filename)
-            self.bagData.write_pytables(filename, self.fileCounter)
+            self.bagData.write_pytables(filename, self.fileCounter, self.bag_group)
             self.fileCounter +=1
+
 
     def process_bag(self, filename):
 
@@ -213,14 +257,20 @@ class DataTableBagProcessor():
             obj.theta = float('nan')
             return obj
 
-        elif msg_type == 'audio_tracking/AudioData16':
-            obj.data = [float('nan')]*2048
+        elif msg_type == 'audio_common_msgs/AudioData':
+            obj.data = []
+            #obj.data = [float('nan')]*2048
+            rospy.logwarn("Audio might be misaligned")
             return obj
 
         elif msg_type == 'gait_capture/PersonFrame':
             obj.person_id = float('nan')
             obj.latest_time = float('nan')
             obj.body_parts = []
+            return obj
+
+        elif msg_type == 'cob_people_detection_msgs/DetectionArray':
+            obj.detections = [float('nan')]
             return obj
 
         else:
@@ -238,7 +288,7 @@ def main():
     data.setup_h5()
         
     # start processing bag files
-    data.process_files()
+    data.process_all()
 
     # Close the h5 file
     data.h5file.close()
