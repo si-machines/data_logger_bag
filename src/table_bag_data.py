@@ -85,8 +85,8 @@ class TableBagData():
                 self.process_gait(topic, msg, stamp)
 
             elif msg_type == 'cob_people_detection_msgs/DetectionArray':
-                #self.process_face_detect(topic, msg, stamp)
-                self.process_generic_msg(topic, msg, stamp)
+                self.process_face_detect(topic, msg, stamp)
+                #self.process_generic_msg(topic, msg, stamp)
 
             elif msg_type == 'bluetooth_capture/PingResult':
                 self.process_bluetooth(topic, msg, stamp)
@@ -140,6 +140,80 @@ class TableBagData():
             data_info[top_field] = temp
             return data_info
 
+    def process_face_detect(self, topic, msg, stamp):
+
+        # Store all of the timestamps by seconds from stamp
+        if 'time' not in self.all_data[topic]:
+            self.all_data[topic]['time'] = []
+        self.all_data[topic]['time'].append(msg.header.stamp.to_sec())
+
+        msg_fields = ['label','detector','position','orientation','label_dist','dist_label']
+
+        if len(msg.detections) > 0:
+            # Compute the closest distance
+            best_dist = 1000000000000000000000000.0
+            best_label = ''
+            best_msg = None
+
+            # find the best face message
+            for detect_msg in msg.detections:
+                if detect_msg.detector == 'face':
+                    dist_arr_msg = detect_msg.dists
+                    for dist_msg in dist_arr_msg:
+                        if dist_msg.distance < best_dist:
+                                best_label = dist_msg.label
+                                best_msg = detect_msg 
+
+            if best_msg == None:
+
+                # Will only get here once - if we never found a head
+                for msg_field in msg_fields:
+                    if msg_field not in self.all_data[topic]:
+                        self.all_data[topic][msg_field] = []
+
+                self.all_data[topic]['label'].append('')
+                self.all_data[topic]['detector'].append(detect_msg.detector)
+                self.all_data[topic]['position'].append([0.0, 0.0, 0.0])
+                self.all_data[topic]['orientation'].append([0.0, 0.0, 0.0, 0.0])
+                self.all_data[topic]['label_dist'].append(0.0)
+                self.all_data[topic]['dist_label'].append('')
+
+            else:
+                for msg_field in msg_fields:
+                    if msg_field not in self.all_data[topic]:
+                        self.all_data[topic][msg_field] = []
+
+                    if msg_field in ['position', 'orientation']:
+                        data = []
+                        data.append(eval('best_msg.pose.pose.'+msg_field+'.x'))
+                        data.append(eval('best_msg.pose.pose.'+msg_field+'.y'))
+                        data.append(eval('best_msg.pose.pose.'+msg_field+'.z'))
+
+                        if msg_field == 'orientation':
+                            data.append(eval('best_msg.pose.pose.'+msg_field+'.w'))
+                       
+                        self.all_data[topic][msg_field].append(data)
+
+                    elif msg_field == 'label_dist':
+                        self.all_data[topic][msg_field].append(best_dist)
+                    elif msg_field == 'dist_label':
+                        self.all_data[topic][msg_field].append(best_label)
+                    else: 
+                        self.all_data[topic][msg_field].append(eval('best_msg.'+msg_field))
+
+        else:
+            for msg_field in msg_fields:
+                if msg_field not in self.all_data[topic]:
+                    self.all_data[topic][msg_field] = []
+
+            self.all_data[topic]['label'].append('')
+            self.all_data[topic]['detector'].append('')
+            self.all_data[topic]['position'].append([0.0, 0.0, 0.0])
+            self.all_data[topic]['orientation'].append([0.0, 0.0, 0.0, 0.0])
+            self.all_data[topic]['label_dist'].append(0.0)
+            self.all_data[topic]['dist_label'].append('')
+        
+                
     def process_bluetooth(self, topic, msg, stamp):
 
         msg_fields = self.msg_field_helper(msg)
@@ -395,6 +469,9 @@ class TableBagData():
             elif msg_type == 'bluetooth_capture/PingResult':
                 self.write_bluetooth(topic_group, data)
 
+            elif msg_type == 'cob_people_detection_msgs/DetectionArray':
+                self.write_face_detect(topic_group, data)
+
             else:
                 rospy.logerr("Message type: %s is not supported" % msg_type)
         
@@ -407,6 +484,11 @@ class TableBagData():
 
         self.pytable_writer_helper(topic_group, ['data'], tables.Int64Atom(), data)
         self.pytable_writer_helper(topic_group, ['time'], tables.Float64Atom(), data)
+
+    def write_face_detect(self, topic_group, data):
+
+        self.pytable_writer_helper(topic_group, ['label', 'dist_label', 'detector'], tables.StringAtom(itemsize=20), data)
+        self.pytable_writer_helper(topic_group, ['position', 'orientation','label_dist','time'], tables.Float64Atom(), data)
 
     def write_audio16(self, topic_group, data):
 
