@@ -161,6 +161,7 @@ class TableBagData():
                     dist_arr_msg = detect_msg.dists
                     for dist_msg in dist_arr_msg:
                         if dist_msg.distance < best_dist:
+                                best_dist = dist_msg.distance
                                 best_label = dist_msg.label
                                 best_msg = detect_msg 
 
