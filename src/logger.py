@@ -40,6 +40,9 @@ class BagDataLogger:
         self.task = "default_task"
         self.skill = "default_skill"
 
+        # Initialize some default runName
+        self.runName = "";
+
         # Append the task and skill onto the data_location
         self.data_custom_location = os.path.join(self.data_location, self.task, self.skill)
 
@@ -83,7 +86,11 @@ class BagDataLogger:
 
             if msg.topics is not "":
                 self.record_topics = msg.topics
-            
+        
+            if msg.runName is not "":
+                self.runName = msg.runName
+                rospy.loginfo("Filename to be written is: %s" % self.runName)
+    
             playback_flag = msg.playback
 
             # Append the task and skill onto the data_location
@@ -132,7 +139,11 @@ class BagDataLogger:
     def startRecord(self):
     
         rospy.loginfo("Set up bag file to write to")
-        filename = self.data_prefix + "_"+time.strftime("%Y-%m-%dT%H%M%S") + ".bag"
+        if self.runName is "":
+            filename = self.data_prefix + "_"+time.strftime("%Y-%m-%dT%H%M%S") + ".bag"
+        else:
+            filename = self.data_prefix + "_"+self.runName+"_"+time.strftime("%Y-%m-%dT%H%M%S") + ".bag"
+
         self.datapath = os.path.join(os.path.expanduser("~"),self.data_custom_location, filename)
         #rospy.loginfo("File name is: %s" % datapath)
         
