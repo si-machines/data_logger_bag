@@ -13,3 +13,6 @@ string topics
 
 # True = playback, false = recording/demonstrating
 bool playback
+
+# Name of the run
+string runName
