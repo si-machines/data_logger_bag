@@ -24,4 +24,7 @@
 
     </node>
 
+    <!-- This node will republish out topics to address the rosjava rosbag bug -->
+    <node name="logger_repub" pkg="data_logger_bag" type="rosjava_topic_republisher.py" respawn="true" output="screen" />
+
 </launch>
