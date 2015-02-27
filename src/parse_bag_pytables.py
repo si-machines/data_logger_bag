@@ -30,7 +30,8 @@ class DataTableBagProcessor():
         rospy.loginfo("Initializing bag parser")
        
         # Default topics to skip and subsample to
-        default_skip_topics = "camera/depth_registered/image_raw camera/rgb/image_raw c6_end_effect_pose_right c6_end_effect_pose_left camera/rgb/camera_info camera/depth_registered/camera_info"
+        #default_skip_topics = "camera/depth_registered/image_raw camera/rgb/image_raw c6_end_effect_pose_right c6_end_effect_pose_left camera/rgb/camera_info camera/depth_registered/camera_info"
+        default_skip_topics = "camera/depth_registered/image_raw camera/rgb/image_raw c6_end_effect_pose_right camera/rgb/camera_info camera/depth_registered/camera_info"
         default_trigger_topic = "C6_FSM_state"
 
         # read paramater
@@ -74,7 +75,9 @@ class DataTableBagProcessor():
             rospy.logwarn("WARNING: subsample topic is %s. Make sure this is your state..." % self.trigger_topic)
 
         # Initialize some variables that might be needed
-        self.fileCounter = 0 
+        self.fileCounter = dict()
+        self.fileCounter['playback'] = 0
+        self.fileCounter['learning'] = 0
        
     def setup_h5(self):
 
@@ -103,8 +106,9 @@ class DataTableBagProcessor():
                     
                     # for all files finally
                     filenames = []
-                    for f in os.listdir(user_loc):
-
+                    filesdir = os.listdir(user_loc) 
+                    filesdir.sort() # puts in the order listed in the OS
+                    for f in filesdir:
                         if f.endswith(".bag"):
                             filename = os.path.join(user_loc, f)
                             filenames.append(filename)
@@ -117,13 +121,19 @@ class DataTableBagProcessor():
     def process_files(self, input_files):
 
         # Reset the count per directory
-        self.fileCounter = 1
+        self.fileCounter['playback'] = 0
+        self.fileCounter['learning'] = 0
+
         for filename in input_files:
 
             # Go through each file
             self.process_bag(filename)
-            self.bagData.write_pytables(filename, self.fileCounter, self.bag_group)
-            self.fileCounter +=1
+            if 'playback' in filename:
+                self.bagData.write_pytables(filename, self.fileCounter['playback'], self.bag_group)
+                self.fileCounter['playback'] +=1
+            else:
+                self.bagData.write_pytables(filename, self.fileCounter['learning'], self.bag_group)
+                self.fileCounter['learning'] +=1
 
 
     def process_bag(self, filename):

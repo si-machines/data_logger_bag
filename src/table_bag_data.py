@@ -417,9 +417,10 @@ class TableBagData():
         path_name = os.path.split(group_name) # Split filepath from filename
         group_name = path_name[1] + '_'+path_name[0].split("/")[-1]
         #group_name = group_name+'_'+str(fileCounter) # Add simple counter for ID purposes later
-        group_name = "exploration_"+path_name[0].split("/")[-1]+"_"+str(fileCounter) 
-        
-        rospy.loginfo("Writing file: %s to pytable" % path_name[1])
+        #group_name = "exploration_"+path_name[0].split("/")[-1]+"_"+str(fileCounter) 
+        group_name = ('_'.join(path_name[1].split('_')[0:-1])+"_"+str(fileCounter).zfill(3)).replace('-','_')
+         
+        rospy.loginfo("Writing file: %s to pytable as %s" % (path_name[1], group_name))
 
         if bag_dir_group is None:
             bag_group = self.h5file.createGroup("/", group_name)
