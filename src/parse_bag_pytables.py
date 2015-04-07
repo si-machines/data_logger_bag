@@ -30,8 +30,7 @@ class DataTableBagProcessor():
         rospy.loginfo("Initializing bag parser")
        
         # Default topics to skip and subsample to
-        #default_skip_topics = "camera/depth_registered/image_raw camera/rgb/image_raw c6_end_effect_pose_right c6_end_effect_pose_left camera/rgb/camera_info camera/depth_registered/camera_info"
-        default_skip_topics = "camera/depth_registered/image_raw camera/rgb/image_raw c6_end_effect_pose_right camera/rgb/camera_info camera/depth_registered/camera_info"
+        default_skip_topics = "camera/depth_registered/image_raw camera/rgb/image_raw c6_end_effect_pose_right c6_end_effect_pose_left camera/rgb/camera_info camera/depth_registered/camera_info"
         default_trigger_topic = "C6_FSM_state"
 
         # read paramater
@@ -203,6 +202,25 @@ class DataTableBagProcessor():
             obj.torque = vec_obj
             return obj
 
+        elif msg_type == 'geometry_msgs/Pose':
+            point_obj = Object()
+            point_obj._type = 'geometry_msgs/Pose'
+
+            point_obj.position = Object()
+            point_obj.position.x = float('nan')
+            point_obj.position.y = float('nan')
+            point_obj.position.z = float('nan')
+            point_obj.position._type = 'geometry_msgs/Point'
+
+            point_obj.orientation = Object()
+            point_obj.orientation.x = float('nan')
+            point_obj.orientation.y = float('nan')
+            point_obj.orientation.z = float('nan')
+            point_obj.orientation.w = float('nan')
+            point_obj.orientation._type = 'geometry_msgs/Quaternion'
+
+            return point_obj
+
         elif msg_type == 'std_msgs/Int8':
             obj.data = float('nan')
             return obj
@@ -225,8 +243,10 @@ class DataTableBagProcessor():
             
         elif msg_type == 'rospcseg/ClusterArrayV0':
             obj_clusters = Object()
+
             obj_clusters.centroid = vec_obj
-            obj_clusters.aligned_bounding_box_size = vec_obj
+            obj_clusters.angle = float('nan')
+
             color = Object()
             color.r = float('nan')
             color.g = float('nan')
@@ -234,12 +254,19 @@ class DataTableBagProcessor():
             color.a = float('nan')
             color._type = 'std_msgs/ColorRGBA'
             obj_clusters.rgba_color =  color
+
             obj_clusters.volume2 = float('nan')
             obj_clusters.bb_volume = float('nan')
             obj_clusters.bb_area = float('nan')
+
+            obj_clusters.aligned_bounding_box_size = vec_obj
+
+            obj_clusters.bb_aspect_ratio = float('nan')
             obj_clusters.av_ratio = float('nan') 
             obj_clusters.compactness = float('nan')
+
             obj_clusters.aligned_bounding_box_center = vec_obj
+
             obj_clusters.min = vec_obj
             obj_clusters.max = vec_obj
             obj.clusters = [obj_clusters]

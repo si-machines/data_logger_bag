@@ -91,6 +91,9 @@ class TableBagData():
             elif msg_type == 'bluetooth_capture/PingResult':
                 self.process_bluetooth(topic, msg, stamp)
 
+            elif msg_type == 'geometry_msgs/Pose':
+                self.process_pose(topic, msg, stamp)
+
             else:
                 rospy.logerr("Message type: %s is not supported" % msg_type)
 
@@ -401,6 +404,29 @@ class TableBagData():
         # It is the same as logControl
         self.process_logControl(topic, msg, stamp)
 
+
+    def process_pose(self, topic, msg, stamp):
+
+        msg_fields = ['position','orientation']
+        for field in msg_fields:
+            if field not in self.all_data[topic]:
+                self.all_data[topic][field] = []
+
+            data_store = []
+            data_store.append(eval('msg.'+field+'.x'))
+            data_store.append(eval('msg.'+field+'.y'))
+            data_store.append(eval('msg.'+field+'.z'))
+            if field == 'orientation':
+                data_store.append(eval('msg.'+field+'.w'))
+
+            self.all_data[topic][field].append(data_store)
+        
+        # Process timestamp - currently just seconds
+        if 'time' not in self.all_data[topic]:
+            self.all_data[topic]['time'] = []
+
+        self.all_data[topic]['time'].append(stamp.to_sec())
+
     def process_bool(self, topic, msg, stamp):
 
         # It is currently the same for this type
@@ -458,6 +484,9 @@ class TableBagData():
 
             elif msg_type == 'geometry_msgs/Pose2D':
                 self.write_pose2D(topic_group, data)
+
+            elif msg_type == 'geometry_msgs/Pose':
+                self.write_pose(topic_group, data)
 
             elif msg_type == 'std_msgs/Bool':
                 self.write_bool(topic_group, data)
@@ -614,6 +643,10 @@ class TableBagData():
 
         fields = ['x', 'y', 'theta', 'time']
         self.pytable_writer_helper(topic_group, fields, tables.Float64Atom(), data)
+
+    def write_pose(self, topic_group, data):
+
+        self.pytable_writer_helper(topic_group, data.keys(), tables.Float64Atom(), data)
 
     def write_bool(self, topic_group, data):
 
