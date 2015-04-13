@@ -13,7 +13,7 @@ from collections import defaultdict
 import numpy as np
 from table_bag_data import TableBagData
 
-from geometry_msgs.msg import Pose2D, Wrench, Vector3, Point, Pose
+#from geometry_msgs.msg import Pose2D, Wrench, Vector3, Point, Pose
 #from std_msgs.msg import String, Int8, Float32MultiArray
 #from sensor_msgs.msg import JointState
 #from pcseg_msgs.msg import ClusterArrayV0
@@ -34,7 +34,7 @@ class DataTableBagProcessor():
         ###################################################################
  
         # Default topics to skip and subsample to
-        default_skip_topics = "camera/depth_registered/image_raw camera/rgb/image_raw c6_end_effect_pose_right c6_end_effect_pose_left camera/rgb/camera_info camera/depth_registered/camera_info"
+        default_skip_topics = "camera/depth_registered/image_raw camera/rgb/image_raw camera/rgb/camera_info camera/depth_registered/camera_info"
         default_trigger_topic = "C6_FSM_state"
 
         # read paramater
@@ -188,6 +188,24 @@ class DataTableBagProcessor():
                 self.bagData.write_pytables(filename, self.fileCounter['learning'], self.bag_group)
                 self.fileCounter['learning'] +=1
 
+    def fix_bag(self, bag):
+        """
+        This is a custom fix for messages from rosjava. There is a minor bug that
+        causes rosjava to not correctly write the message definitions to the bag file.
+        
+        This in turn causes the dynamic message loader genpy.dynamic (line 125) to
+        not find the message and error out.
+        """
+
+        # Go through each of the rosbag messages and fix them
+        # This is a manual hack to deal with certain message types that do not
+        # exist correctly in rosjava
+        for i in xrange(len(bag._connections)):
+            connection = bag._connections[i]
+            if 'c6_end_effect_pose' in connection.topic:
+                bag._connections[i].msg_def = '# A representation of pose in free space, composed of postion and orientation. \nPoint position\nQuaternion orientation\n\n================================================================================\nMSG: geometry_msgs/Point\n# This contains the position of a point in free space\nfloat64 x\nfloat64 y\nfloat64 z\n\n================================================================================\nMSG: geometry_msgs/Quaternion\n# This represents an orientation in free space in quaternion form.\n\nfloat64 x\nfloat64 y\nfloat64 z\nfloat64 w\n\n'
+
+        return bag
 
     def process_bag(self, filename):
 
@@ -206,6 +224,9 @@ class DataTableBagProcessor():
 
         # Open up the bag file and get info on it
         info_dict = yaml.load(subprocess.Popen(['rosbag', 'info', '--yaml', filename], stdout=subprocess.PIPE).communicate()[0])
+
+        # Fix the bag file for rosjava incorrect message headers
+        bag = self.fix_bag(bag)
 
         # Go through each of the topics and initialize variables
         for topics in info_dict['topics']:
