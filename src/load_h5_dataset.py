@@ -9,20 +9,6 @@ import cPickle
 from collections import defaultdict
 import matplotlib.pyplot as plt
 
-
-def table_pull_data(group_data):
-
-    group_data_dict = dict()
-
-    # Pull out fields for the topic
-    fields = [_v for _v in group_data._v_leaves]
-
-    for field in fields:
-        group_data[field] = eval('group_data.'+field+'[:]')
-
-    return group_data_dict
-
-
 def pull_groups(group_data, group_name):
 
     # Pull out all group names if exists
@@ -38,7 +24,7 @@ def pull_groups(group_data, group_name):
    
     # Base case where we stop and store if we no longer have groups left          
     else:
-        
+
         node_dict = dict() 
         # Pull out fields for the topic
         fields = [_v for _v in group_data._v_leaves]
@@ -69,43 +55,73 @@ def extract_data(one_run):
 
     return store_data
 
-def old_extract_data(one_run):
+def load_data_section(data, keys, directories, searching, max_level=None):
 
-    # Create a dictionary to store all of the run
-    store_data = defaultdict(dict)
+    # Check if we're looking for the start point of extraction
+    if searching:
+        stored_data = dict()
+        topics = [_v for _v in data._v_groups]
 
-    # pull out the topics
-    data_topics = [_v for _v in one_run._v_groups]
+        # check how deep to go if specified (for speedup purposes)
+        if max_level is not None:
+            if max_level < 0:
+                return ({}, False)
+            else:
+                max_level-=1
 
-    for topic in data_topics:
-
-        # Pull out the data
-        topic_data = eval('one_run.'+topic)
+        if len(topics) < 1:
+            return ({}, False)
         
-        # Put in special check for object_msg
-        if topic == 'c6_objects':
-            object_dict = defaultdict(dict)
-            # Pull out fields for the topic
-            obj_groups = [_v for _v in topic_data._v_groups]
-            for obj_group in obj_groups:
-                object_data = eval('topic_data.'+obj_group)
-                fields = [_v for _v in object_data._v_leaves]
-                for field in fields:
-                    object_dict[obj_group][field] = eval('object_data.'+field+'[:]')
-            store_data[topic] = object_dict
+        # Check if the first value in directories is on this level
+        if directories[0] not in topics:
+            for topic in topics: 
+                data_next = eval('data.'+topic) 
+                (ret_dict, found) = load_data_section(data_next, keys, directories, True, max_level=max_level)
+                if found:
+                    stored_data[topic] = ret_dict               
+           
+            return (stored_data, len(stored_data.keys()) > 0)  
         else:
+            return (load_data_section(data, keys, directories, False, max_level=max_level), True)
+    else:
+        stored_data = dict()
+        dir_levels = list(directories)
+        # Go through each group until we get down to the keys
+        # Makes the assumption that directories do not have data other
+        # than when we get to the end of the directories given
+        while dir_levels:
+            
+            # Pull out the data
+            topics = [_v for _v in data._v_groups]
+            loc = dir_levels.pop(0)
+            
+            # Check if we are getting the right directory structure
+            # If not, then pull out all values up until
+            if loc not in topics:
+                print('Warning: directory levels passed in do not match actual h5 structure')
+                print('dir value: %s , structure is: %s'% (loc, topics))
 
-            # Pull out fields for the topic
-            fields = [_v for _v in topic_data._v_leaves]
-      
-            for field in fields:
-                store_data[topic][field] = eval('topic_data.'+field+'[:]')
+            data = eval('data.'+loc) 
 
-    return store_data
+        # Now start storing
+        for single_run in data: 
+            stored_data[single_run._v_name] = extract_data(single_run) 
 
+        # Store the data away with the directory structure intact    
+        segment_data = dict()
+        create_dict_recurse(list(directories), segment_data, stored_data)
 
+        return segment_data
 
-def load_data(input_filename, output_filename, save_to_file):
+def create_dict_recurse(keys, cur_dict, stored_data):
+    if len(keys) > 1:
+        new_dict = cur_dict.setdefault(keys.pop(0), {})
+        create_dict_recurse(keys, new_dict, stored_data)
+    else:
+        new_dict = cur_dict.setdefault(keys.pop(0), stored_data)
+
+def load_data(input_filename, output_filename, save_to_file, 
+              keys=None, directories=None, max_level=None):
 
     if not input_filename.endswith(".h5"):
         raise Exception("Input file is %s \nPlease pass in a hdf5 data file" % input_filename)
@@ -116,20 +132,23 @@ def load_data(input_filename, output_filename, save_to_file):
 
     # Load the data from an h5 file
     all_data = tables.openFile(input_filename)
-
-    # Store number of runs
-    num_runs = 0
-
+    
+    # Much faster way to access the root node
+    root_data = all_data.getNode('/')
+    all_runs_root = [_g for _g in all_data.getNode('/')._v_groups]
+    
     # Pull pointers to only the file heads of the data structure
-    all_runs_root = [_g for _g in all_data.walkGroups("/") if _g._v_depth == 1]
+    #all_runs_root = [_g for _g in all_data.walkGroups("/") if _g._v_depth == 1]
 
-    # Create a dictionary to store all of the data 
-    stored_data = dict()
+    if keys is not None:
+        (stored_data, done) = load_data_section(root_data, keys, directories, True, max_level=max_level)
+    else:
+        # Create a dictionary to store all of the data 
+        stored_data = dict()
 
-    # For each file extract the segments and data
-    for _objectRun in all_runs_root:
-        num_runs += 1
-        stored_data[_objectRun._v_name] = extract_data(_objectRun) 
+        # For each file extract the segments and data
+        for _objectRun in all_runs_root:
+            stored_data[_objectRun._v_name] = extract_data(_objectRun) 
 
     # if we want to save to file
     if (save_to_file):
