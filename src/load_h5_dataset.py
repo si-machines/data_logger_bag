@@ -100,6 +100,8 @@ def load_data_section(data, directories, searching, max_level=None):
             if loc not in topics:
                 print('Warning: directory levels passed in do not match actual h5 structure')
                 print('dir value: %s , structure is: %s'% (loc, topics))
+                print('Skipping this branch')
+                return stored_data
 
             data = eval('data.'+loc) 
 
@@ -112,6 +114,9 @@ def load_data_section(data, directories, searching, max_level=None):
         create_dict_recurse(list(directories), segment_data, stored_data)
 
         return segment_data
+
+
+
 
 def create_dict_recurse(keys, cur_dict, stored_data):
     if len(keys) > 1:

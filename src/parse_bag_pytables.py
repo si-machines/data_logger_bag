@@ -53,8 +53,7 @@ class DataTableBagProcessor():
                _output_file:=<output_file.h5>\n\
                _skip_topics:=<ros topics to NOT parse>\n\
                _trigger_topic:=<what ros topic to downsample to>\n\
-               _sub_sample_flag:=<True or False>\n\
-               _dir_outfile_flag:=<True or False>" % sys.argv[0])
+               _sub_sample_flag:=<True or False>\n\ " % sys.argv[0])
             sys.exit()
 
         ###################################################################
@@ -70,7 +69,10 @@ class DataTableBagProcessor():
             self.output_filename = file_split[-1]+'.h5'
         else:
             # Expand wildcards if any
-            self.input_filenames = glob.glob(os.path.expanduser(input_files))
+            if input_files.endswith('.bag'):
+                self.input_filenames = [input_files]
+            else:
+                self.input_filenames = glob.glob(os.path.expanduser(input_files))
             self.output_filename = os.path.expanduser(output_file)
 
         # Check if we're subsampling the data
