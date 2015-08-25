@@ -140,10 +140,6 @@ def load_data(input_filename, output_filename, save_to_file,
     
     # Much faster way to access the root node
     root_data = all_data.getNode('/')
-    all_runs_root = [_g for _g in all_data.getNode('/')._v_groups]
-    
-    # Pull pointers to only the file heads of the data structure
-    #all_runs_root = [_g for _g in all_data.walkGroups("/") if _g._v_depth == 1]
 
     if directories is not None:
         (stored_data, done) = load_data_section(root_data, directories, True, max_level=max_level)
@@ -151,9 +147,15 @@ def load_data(input_filename, output_filename, save_to_file,
         # Create a dictionary to store all of the data 
         stored_data = dict()
 
+        # Pull pointers to only the file heads of the data structure
+        # Very slow method - instead we just group the name and evaluate
+        #all_runs_root = [_g for _g in all_data.walkGroups("/") if _g._v_depth == 1]
+        all_runs_root = [_g for _g in all_data.getNode('/')._v_groups]
+
         # For each file extract the segments and data
-        for _objectRun in all_runs_root:
-            stored_data[_objectRun._v_name] = extract_data(_objectRun) 
+        for _objectRunName in all_runs_root:
+            _objectRun = eval('root_data.'+_objectRunName) 
+            stored_data[_objectRun._v_name] = extract_data(_objectRun)
 
     # if we want to save to file
     if (save_to_file):
