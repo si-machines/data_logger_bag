@@ -439,13 +439,21 @@ class TableBagData():
         Start writing data to the table
         '''
         # TODO figure out naming scheme for groups
-        group_name = filename.partition(".")[0]
+        group_name = os.path.splitext(filename)[0]
         path_name = os.path.split(group_name) # Split filepath from filename
         group_name = path_name[1] + '_'+path_name[0].split("/")[-1]
         #group_name = group_name+'_'+str(fileCounter) # Add simple counter for ID purposes later
         #group_name = "exploration_"+path_name[0].split("/")[-1]+"_"+str(fileCounter) 
+        #group_name = ('_'.join(path_name[1].split('_')[0:-1])+"_"+str(fileCounter).zfill(3)).replace('-','_')
         group_name = ('_'.join(path_name[1].split('_')[0:-1])+"_"+str(fileCounter).zfill(3)).replace('-','_')
-         
+
+        # Add in custom name conversion 
+        group_name = group_name.replace('.','Decimal')
+        group_name = group_name.replace('[','LeftBracket')
+        group_name = group_name.replace(']','RightBracket')
+        group_name = group_name.replace(',','Comma')
+        group_name = group_name.replace(':','Colon')
+        
         rospy.loginfo("Writing file: %s to pytable as %s" % (path_name[1], group_name))
 
         if bag_dir_group is None:

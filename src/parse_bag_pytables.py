@@ -47,13 +47,17 @@ class DataTableBagProcessor():
         self.sub_sample = rospy.get_param("~sub_sample_flag", False)
         self.trigger_topic = rospy.get_param("~trigger_topic", default_trigger_topic)
 
+        # Check if we have a flag for custom ordering
+        self.custom_order = rospy.get_param("~custom_order", None)
+
         # Actually exits the system with the usage if input files are not provided
         if input_files == "":
             rospy.logerr("Usage: %s _input_files:=<input_files> \nOptional args:\n\n\
                _output_file:=<output_file.h5>\n\
                _skip_topics:=<ros topics to NOT parse>\n\
                _trigger_topic:=<what ros topic to downsample to>\n\
-               _sub_sample_flag:=<True or False>\n\ " % sys.argv[0])
+               _sub_sample_flag:=<True or False>\n\
+               _custom_order:=<Token where run numbers fall after. e.g. Run>" % sys.argv[0])
             sys.exit()
 
         ###################################################################
@@ -64,9 +68,12 @@ class DataTableBagProcessor():
         if os.path.isdir(input_files):
             self.input_filenames = input_files
 
-            # Setup output file names with directory format
-            file_split = input_files.split(os.sep)
-            self.output_filename = file_split[-1]+'.h5'
+            if 'converted_data.h5' in output_file: 
+                # Setup output file names with directory format
+                file_split = input_files.split(os.sep)
+                self.output_filename = file_split[-1]+'.h5'
+            else:
+                self.output_filename = os.path.expanduser(output_file)
         else:
             # Expand wildcards if any
             if input_files.endswith('.bag'):
@@ -130,9 +137,10 @@ class DataTableBagProcessor():
             
         else:
             # Else just treat the input as a list of files
+            # Currently assumes you will pass in the files in the order you want
             self.process_files(self.input_filenames)
 
-    def process_all_recurse(self, filename, group_name):
+    def process_all_recurse(self, filename, group_name, custom_order=None):
         '''
         Recursively goes through the directory and files and 
         creates the proper h5 groups and populates them
@@ -164,7 +172,24 @@ class DataTableBagProcessor():
         # for all files finally
         filenames = []
         filesdir = os.listdir(directory) 
-        filesdir.sort() # puts in the order listed in the OS
+
+        # Check if we have a custom sorting order
+        # Assume that custom_order contains the string to split with the
+        # first thing after the split the run number
+        # Ex. 'playback_move_breadbox-Depth0Run5_successDemo.h5 - custom_order = 'Run'
+        if self.custom_order is not None:
+            # Pull out the run order according to the custom order token
+            run_order = map(int,[x.split(self.custom_order)[1].split('_')[0] for x in filesdir])
+
+            # Sort and reorg the filenames
+            sorted_order = sorted(range(len(run_order)), key=lambda k: run_order[k]) 
+
+            # Now sort!
+            filesdir.sort(key=dict(zip(filesdir, run_order)).get)
+        else:
+            filesdir.sort() # puts in the order listed in the OS
+
+        # Go through each file that ends in .bag and start to convert
         for f in filesdir:
             if f.endswith(".bag"):
                 filename = os.path.join(directory, f)
