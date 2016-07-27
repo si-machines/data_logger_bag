@@ -1,5 +1,4 @@
 #! /usr/bin/python
-import roslib; roslib.load_manifest("data_logger_bag")
 import rospy
 import rosbag
 import numpy

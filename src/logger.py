@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import roslib; roslib.load_manifest('data_logger_bag')
 import rospy
 import os
 import time
@@ -47,7 +46,7 @@ class BagDataLogger:
         self.data_custom_location = os.path.join(self.data_location, self.task, self.skill)
 
         # Setup publisher for bagfile
-        self.bag_file_loc_pub = rospy.Publisher('bag_file_loc', String)
+        self.bag_file_loc_pub = rospy.Publisher('bag_file_loc', String, queue_size=10)
 
         rospy.loginfo("Initialized data logger node")
 

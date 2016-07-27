@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # Script to start loading data into pytables and convert into meaningful features
-import roslib; roslib.load_manifest("data_logger_bag")
 import rospy
 import sys
 import tables

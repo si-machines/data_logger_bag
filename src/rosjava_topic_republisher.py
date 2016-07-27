@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-import roslib; roslib.load_manifest("data_logger_bag")
 import rospy
 from std_msgs.msg import String
 from geometry_msgs.msg import Pose
@@ -18,8 +17,8 @@ def callbackRight(data):
 
  
 def listener():
-    rospy.Subscriber("/c6_end_effect_pose_left", Pose, callback)
-    rospy.Subscriber("/c6_end_effect_pose_right", Pose, callbackRight)
+    rospy.Subscriber("/c6_end_effect_pose_left", Pose, callback, queue_size=10)
+    rospy.Subscriber("/c6_end_effect_pose_right", Pose, callbackRight, queue_size=10)
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
 
