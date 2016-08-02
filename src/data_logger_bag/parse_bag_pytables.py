@@ -1,4 +1,46 @@
 #! /usr/bin/python
+
+# Copyright (c) 2016, Socially Intelligent Machines Lab 
+# All rights reserved.
+# 
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 
+# * Redistributions of source code must retain the above copyright notice, this
+#   list of conditions and the following disclaimer.
+# 
+# * Redistributions in binary form must reproduce the above copyright notice,
+#   this list of conditions and the following disclaimer in the documentation
+#   and/or other materials provided with the distribution.
+# 
+# * Neither the name of data_logger_bag nor the names of its 
+#   contributors may be used to endorse or promote products derived from
+#   this software without specific prior written permission.
+# 
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+# Author: Vivian Chu, vchu@gatech.edu
+
+'''
+parse_bag_pytables.py
+
+This is the main class that processes either standalone bag files or a directory
+of bag files. It calls the TableBagData class to actually convert raw data into hdf5 format
+
+It is designed to allow for raw topic writing (at the Hz it was recorded) or a subsampled
+format that uses a specific topic to subsample the remaining the topics to. This guarantees
+data alignment
+'''
+
 import rospy
 import rosbag
 import numpy
@@ -11,13 +53,6 @@ import glob
 from collections import defaultdict
 import numpy as np
 from table_bag_data import TableBagData
-
-#from geometry_msgs.msg import Pose2D, Wrench, Vector3, Point, Pose
-#from std_msgs.msg import String, Int8, Float32MultiArray
-#from sensor_msgs.msg import JointState
-#from pcseg_msgs.msg import ClusterArrayV0
-
-
 
 class DataTableBagProcessor():
 
