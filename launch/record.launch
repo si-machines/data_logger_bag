@@ -1,28 +1,32 @@
 <?xml version="1.0"?>
 <launch>
 
+    <arg name="node_name" default="data_logger"/>
+    <arg name="record_topics" default="joint_states"/>
+    <arg name="data_prefix" default="collection"/>
+    <arg name="datapath" default="data/robot"/>
+    <arg name="logger_flag" default="data_logger_flag"/>
+
     <!-- Setup the node with parameters for what we want to listen to 
          and what the flag used to trigger recording -->
 
-    <node name= "data_logger" pkg="data_logger_bag" type="logger.py" respawn="false" output="screen">
+    <node name="$(arg node_name)" pkg="data_logger_bag" type="logger.py" respawn="false" output="screen">
 
         <!-- This location assumes that it is in your home dir. NOTE: path will be created for you -->
         <!-- default: data -->
-        <param name="datapath" value="data/c6_data" type="string"/>
+        <param name="datapath" value="$(arg datapath)" type="string"/>
 
         <!-- Note: the topics are separated just by spaces -->
         <!-- default: joint_states c6_logger_flag -->
-        <!--param name="record_topics" value="camera/depth_registered/image_raw camera/depth_registered/camera_info camera/rgb/image_raw camera/rgb/camera_info c6_logger_flag joint_states loadx6_right_state loadx6_left_state KF_current_frame" type="string"/-->
-        <!--param name="record_topics" value="camera/depth_registered/image_raw camera/depth_registered/camera_info camera/rgb/image_raw camera/rgb/camera_info c6_logger_flag joint_states loadx6_right_state loadx6_left_state KF_current_frame humanoid_state zlift_state omnibase_state" type="string"/-->
-        <param name="record_topics" value="joint_states eef_pose" type="string"/>
+        <param name="record_topics" value="$(arg record_topics)" type="string"/>
 
         <!-- prefix before filenames to append -->
         <!-- default: collection -->
-        <param name="data_prefix" value="collection" type="string"/>
+        <param name="data_prefix" value="$(arg data_prefix)" type="string"/>
 
         <!-- Topic name to trigger recording on -->
         <!-- default: data_logger_flag -->
-        <param name="log_flag_topic" value="data_logger_flag" type="string"/>
+        <param name="log_flag_topic" value="$(arg logger_flag)" type="string"/>
 
     </node>
 
