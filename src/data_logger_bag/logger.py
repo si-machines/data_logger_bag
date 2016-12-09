@@ -55,7 +55,6 @@ class BagDataLogger:
 
         # Initialize node
         rospy.init_node("data_logger", anonymous=True)
-        rospy.loginfo("Initializing data logger node")
 
         # default topics to record - separated only by a space
         default_record_topics = "joint_states c6_logger_flag"
@@ -87,7 +86,7 @@ class BagDataLogger:
         # Setup publisher for bagfile
         self.bag_file_loc_pub = rospy.Publisher('bag_file_loc', String, queue_size=10)
 
-        rospy.loginfo("Initialized data logger node")
+        rospy.loginfo("Initialized data logger node with logger flag topic: %s" % self.logger_flag_topic)
 
     '''
     Setup the subscribers
