@@ -101,6 +101,9 @@ class TableBagData():
                 
             elif msg_type == 'sensor_msgs/CameraInfo':
                 self.process_cameraInfo(data)
+
+            elif msg_type == 'sensor_msgs/Image':
+                self.process_image(topic, msg, stamp)
                 
             elif msg_type == 'std_msgs/String':
                 self.process_string(topic, msg, stamp)
@@ -255,6 +258,26 @@ class TableBagData():
             self.all_data[topic]['dist_label'].append('')
         
                 
+    def process_image(self, topic, msg, stamp):
+        msg_fields = self.msg_field_helper(msg)
+        for msg_field in msg_fields:
+            if msg_field not in self.all_data[topic]:
+                self.all_data[topic][msg_field] = []
+
+            if msg_field == 'data':
+                convert_data = np.fromstring(msg.data, dtype=np.uint8)
+                if len(convert_data) == 0:
+                    convert_data = np.array([float('nan')]*921600)
+                    rospy.logwarn("Warning - assume image is 640x480")
+                self.all_data[topic][msg_field].append(convert_data)
+            else:
+                self.all_data[topic][msg_field].append(eval('msg.'+msg_field))
+
+        # Store all of the timestamps by seconds from stamp
+        if 'time' not in self.all_data[topic]:
+            self.all_data[topic]['time'] = []
+        self.all_data[topic]['time'].append(stamp.to_sec())
+
     def process_bluetooth(self, topic, msg, stamp):
 
         msg_fields = self.msg_field_helper(msg)
@@ -521,6 +544,9 @@ class TableBagData():
             elif msg_type == 'sensor_msgs/CameraInfo':
                 self.write_cameraInfo(topic_group, data)
                 
+            elif msg_type == 'sensor_msgs/Image':
+                self.write_image(topic_group, data)
+
             elif msg_type == 'std_msgs/String':
                 self.write_string(topic_group, data)
                 
@@ -555,6 +581,13 @@ class TableBagData():
     def write_wrench(self, topic_group, data):
 
         self.pytable_writer_helper(topic_group, data.keys(), tables.Float64Atom(), data)
+
+    def write_image(self, topic_group, data):
+        # Note: you need to load and reshape (data.reshape(480,640,3))
+        self.pytable_writer_helper(topic_group, ['data'], tables.UInt8Atom(), data)
+        self.pytable_writer_helper(topic_group, ['width','height','step','is_bigendian'], tables.Int64Atom(), data)
+        self.pytable_writer_helper(topic_group, ['encoding'], tables.StringAtom(itemsize=15), data)
+        self.pytable_writer_helper(topic_group, ['time'], tables.Float64Atom(), data)
 
     def write_int8(self, topic_group, data):
 

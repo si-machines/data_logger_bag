@@ -1,0 +1,4 @@
+bool request
+---
+LogControl response
+string data_location

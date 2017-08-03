@@ -68,7 +68,7 @@ class DataTableBagProcessor():
         ###################################################################
  
         # Default topics to skip and subsample to
-        default_skip_topics = "camera/depth_registered/image_raw camera/rgb/image_raw camera/rgb/camera_info camera/depth_registered/camera_info"
+        default_skip_topics = "camera/depth_registered/image_raw camera/rgb/camera_info camera/depth_registered/camera_info"
         default_trigger_topic = "C6_FSM_state"
 
         # read paramater
@@ -301,7 +301,7 @@ class DataTableBagProcessor():
 
         # Go through the topics in the bag file
         for topic, msg, stamp in bag.read_messages(topics=self.all_topics):
-            
+
             # Store off the topics not being downsampled
             self.data_store[topic] = (msg,stamp)
 
@@ -431,6 +431,15 @@ class DataTableBagProcessor():
             
         elif msg_type == 'std_msgs/Bool':
             obj.data = False
+            return obj
+
+        elif msg_type == 'sensor_msgs/Image':
+            obj.header = None
+            obj.height = float('nan')
+            obj.width = float('nan')
+            obj.encoding = ""
+            obj.step = float('nan')
+            obj.data = ''
             return obj
 
         elif msg_type == 'geometry_msgs/Pose2D':

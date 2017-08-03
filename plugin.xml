@@ -1,0 +1,20 @@
+<library path="src">
+    <class name="Data Logger Bag GUI" type="data_logger_bag.rqt_data_logger.DataLoggerViz" base_class_type="rqt_gui_py::Plugin">
+        <description>
+            TODO
+        </description>
+        <qtgui>
+            <!-- optional grouping...
+            <group>
+                <label>Group</label>
+            </group>
+            <group>
+                <label>Subgroup</label>
+            </group>
+            -->
+            <label>Data Logger GUI</label>
+            <icon type="theme">applications-other</icon>
+            <statustip>Data Logger GUI</statustip>
+        </qtgui>
+    </class>
+</library>

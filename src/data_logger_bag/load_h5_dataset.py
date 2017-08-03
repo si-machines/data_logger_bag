@@ -89,7 +89,7 @@ def extract_data(one_run):
 
     return store_data
 
-def load_data_section(data, directories, searching, max_level=None):
+def load_data_section(data, directories, searching, max_level=None, spec_key=False):
 
     # Check if we're looking for the start point of extraction
     if searching:
@@ -105,18 +105,18 @@ def load_data_section(data, directories, searching, max_level=None):
 
         if len(topics) < 1:
             return ({}, False)
-        
+       
         # Check if the first value in directories is on this level
         if directories[0] not in topics:
             for topic in topics: 
                 data_next = eval('data.'+topic) 
-                (ret_dict, found) = load_data_section(data_next, directories, True, max_level=max_level)
+                (ret_dict, found) = load_data_section(data_next, directories, True, max_level=max_level, spec_key=spec_key)
                 if found:
                     stored_data[topic] = ret_dict               
            
             return (stored_data, len(stored_data.keys()) > 0)  
         else:
-            return (load_data_section(data, directories, False, max_level=max_level), True)
+            return (load_data_section(data, directories, False, max_level=max_level, spec_key=spec_key), True)
     else:
         stored_data = dict()
         dir_levels = list(directories)
@@ -140,8 +140,12 @@ def load_data_section(data, directories, searching, max_level=None):
             data = eval('data.'+loc) 
 
         # Now start storing
-        for single_run in data: 
-            stored_data[single_run._v_name] = extract_data(single_run) 
+        # Check if we've specified a specific key - if so, we're only extracting one run
+        if spec_key:
+            stored_data[data._v_name] = extract_data(data)
+        else:
+            for single_run in data: 
+                stored_data[single_run._v_name] = extract_data(single_run) 
 
         # Store the data away with the directory structure intact    
         segment_data = dict()
@@ -160,7 +164,7 @@ def create_dict_recurse(keys, cur_dict, stored_data):
         new_dict = cur_dict.setdefault(keys.pop(0), stored_data)
 
 def load_data(input_filename, output_filename, save_to_file, 
-              directories=None, max_level=None):
+              directories=None, max_level=None, spec_key=False):
 
     if not input_filename.endswith(".h5"):
         raise Exception("Input file is %s \nPlease pass in a hdf5 data file" % input_filename)
@@ -176,7 +180,7 @@ def load_data(input_filename, output_filename, save_to_file,
     root_data = all_data.getNode('/')
 
     if directories is not None:
-        (stored_data, done) = load_data_section(root_data, directories, True, max_level=max_level)
+        (stored_data, done) = load_data_section(root_data, directories, True, max_level=max_level, spec_key=spec_key)
     else:
         # Create a dictionary to store all of the data 
         stored_data = dict()
