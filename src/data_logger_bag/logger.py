@@ -51,6 +51,7 @@ class BagDataLogger:
 
     REQUEST_LOGGER_SETTING_SRV = "get_data_logger_settings"
     GLOBAL_CONTROL_TOPIC = "/data_logger_bag/control"
+    GLOBAL_START_STOP_TOPIC = "/data_logger_bag/flag_topic"
 
     ''' 
     Initialize the node 
@@ -75,7 +76,8 @@ class BagDataLogger:
         self.data_prefix = rospy.get_param("~data_prefix", default_data_prefix)
 
         # Set the global topic name
-        self.set_param(self.GLOBAL_CONTROL_TOPIC, self.c6_task_topic)
+        rospy.set_param(self.GLOBAL_CONTROL_TOPIC, self.c6_task_topic)
+        rospy.set_param(self.GLOBAL_START_STOP_TOPIC, self.logger_flag_topic)
 
         # Initialize the flag to false
         self.logger_flag = False
