@@ -134,6 +134,11 @@ class TableBagData():
             elif msg_type == 'geometry_msgs/Pose':
                 self.process_pose(topic, msg, stamp)
 
+            # More custom messages
+            elif msg_type == 'hlpr_perception_msgs/ExtractedFeaturesArray':
+                #self.process_hlpr_perception_features(topic, msg, stamp)
+                self.process_generic_msg(topic, msg, stamp)
+
             else:
                 rospy.logerr("Message type: %s is not supported" % msg_type)
 
@@ -568,11 +573,16 @@ class TableBagData():
             elif msg_type == 'audio_common_msgs/AudioData':
                 self.write_audio16(topic_group, data)
 
+            # More custom messages
+            elif msg_type == 'hlpr_perception_msgs/ExtractedFeaturesArray':
+                self.write_hlpr_feature_msg(topic_group, data)
+
             elif msg_type == 'bluetooth_capture/PingResult':
                 self.write_bluetooth(topic_group, data)
 
             elif msg_type == 'cob_people_detection_msgs/DetectionArray':
                 self.write_face_detect(topic_group, data)
+
 
             else:
                 rospy.logerr("Message type: %s is not supported" % msg_type)
@@ -611,15 +621,25 @@ class TableBagData():
             data['time'][replace_idx] = data['time'][good_idx]
         '''
 
-        # Convert to int16
-        raw_audio = np.fromstring(''.join(data['data']), dtype=np.int16)
+        import pdb; pdb.set_trace()
+        # Convert to int16 or int8
+        try:
+            raw_audio = np.fromstring(''.join(data['data']), dtype=np.int16)
+        except:
+            try:
+                raw_audio = np.fromstring(''.join(data['data']), dtype=np.int8)
+            except:
+                rospy.logerr("Cannot convert audio bytes")
+                raw_audio = []
+        data['raw_audio'] = raw_audio
 
         # Pull out left and right audio
         # Warning: this might be flipped...(right/left)
-        data['right_audio'], data['left_audio'] = raw_audio[0::2],raw_audio[1::2]
+        # NOTE: Don't need to do this currently for mono channel (Kinect and Mic). Later make a flag
+        #data['right_audio'], data['left_audio'] = raw_audio[0::2],raw_audio[1::2]
+        #self.pytable_writer_helper(topic_group, ['left_audio', 'right_audio'], tables.Int64Atom(), data)
 
-        self.pytable_writer_helper(topic_group, ['left_audio', 'right_audio'], tables.Int64Atom(), data)
-        self.pytable_writer_helper(topic_group, ['time'], tables.Float64Atom(), data)
+        self.pytable_writer_helper(topic_group, ['raw_audio', 'time'], tables.Int64Atom(), data)
 
     def write_jointState(self, topic_group, data):
 
@@ -646,6 +666,10 @@ class TableBagData():
                 # Write off the transform information
                 self.pytable_writer_helper(body_part_group, body_part_data.keys(), tables.Float64Atom(), body_part_data)
 
+    def write_hlpr_feature_msg(self, topic_group, data):
+
+        # Cycle through and pull out the pieces of data. We have 'header, 'objects','transforms','planes'
+        import pdb; pdb.set_trace()
 
     def write_generic_msg(self, topic_group, data):
 
