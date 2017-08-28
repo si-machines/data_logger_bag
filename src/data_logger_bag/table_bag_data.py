@@ -51,6 +51,7 @@ from collections import defaultdict
 import numpy as np
 
 from geometry_msgs.msg import Pose2D, Wrench, Vector3, Point, Pose
+from genpy import Time
 
 class TableBagData():
     '''
@@ -126,7 +127,6 @@ class TableBagData():
 
             elif msg_type == 'cob_people_detection_msgs/DetectionArray':
                 self.process_face_detect(topic, msg, stamp)
-                #self.process_generic_msg(topic, msg, stamp)
 
             elif msg_type == 'bluetooth_capture/PingResult':
                 self.process_bluetooth(topic, msg, stamp)
@@ -136,14 +136,18 @@ class TableBagData():
 
             # More custom messages
             elif msg_type == 'hlpr_perception_msgs/ExtractedFeaturesArray':
-                #self.process_hlpr_perception_features(topic, msg, stamp)
-                self.process_generic_msg(topic, msg, stamp)
+                if topic not in self.all_data:
+                    self.all_data[topic] = []
+                self.all_data[topic].append(self.process_custom_msgs(topic, msg, stamp))
 
             else:
-                rospy.logerr("Message type: %s is not supported" % msg_type)
+                if topic not in self.all_data:
+                    self.all_data[topic] = []
+                self.all_data[topic].append(self.process_custom_msgs(topic, msg, stamp))
+                #rospy.logerr("Message type: %s is not supported" % msg_type)
 
-        except:
-            rospy.logerr("Error processing topic: %s " % topic)
+        except Exception, e:
+            rospy.logerr("Error processing topic: %s. Error is: %s " % (topic, str(e)))
 
     def msg_field_helper(self, msg):
         '''
@@ -187,6 +191,45 @@ class TableBagData():
                 temp = self.generic_msg_recurse(eval('msg.'+field), field, temp)
             data_info[top_field] = temp
             return data_info
+
+    def process_custom_msgs(self, topic, msg, stamp):
+        # Take any message and recursively go down until we hit a base message
+        #import pdb; pdb.set_trace()
+        store_dict = dict()
+        if type(msg) == list:
+            n_msg_store = []
+            for n_msg in msg:
+                n_msg_store.append(self.process_custom_msgs(topic, n_msg, stamp))
+            store_dict[topic] = n_msg_store
+        else:
+            topic_names = self.msg_field_helper(msg)
+
+            # import the different messages
+            for msg_topic in topic_names:
+
+                msg_val = eval('msg.'+msg_topic)
+                if type(msg_val) == list:
+                    store_dict[msg_topic] = self.process_custom_msgs(msg_topic, msg_val, stamp)
+                else:
+                    # Get the base message
+                    if hasattr(msg_val, '_type'):
+                        store_dict[msg_topic] = self.process_custom_msgs(msg_topic, msg_val, stamp)
+                    else:
+                        store_dict[msg_topic] = msg_val
+            '''
+            package = msg_type_arr[0]
+            msg_name = msg_type_arr[1].split('[')[0]
+
+            # Try to import the message
+            try:
+                exec('from ' + package + '.msg import ' + msg_name)
+            except ImportError:
+                raise ImportError('Could not import: %s' % '.'.join(package, msg_name))
+
+            # Now process the message
+            store_dict[msg_topic] = eval('msg.'+msg_topic)
+            '''
+        return store_dict
 
     def process_face_detect(self, topic, msg, stamp):
 
@@ -497,7 +540,48 @@ class TableBagData():
         # It is currently the same for this type
         self.process_int8(topic, msg, stamp)
 
+    def merge(self, ad, bd):
+        for key in bd:
+            if key in ad:
+                if isinstance(ad[key], dict) and isinstance(bd[key], dict):
+                    self.merge(ad[key], bd[key])
+                elif isinstance(ad[key], list) and isinstance(bd[key], list):
+                    temp_store = []
+                    for i in xrange(len(bd[key])):
+                        if i >= len(ad[key]):
+                            temp_store.append(self.create_empty_dict(bd[key][i],dict()))
+                        else:
+                            temp_dict = ad[key][i].copy()
+                            self.merge(temp_dict,bd[key][i])
+                            temp_store.append(temp_dict)
+                    ad[key] = temp_store
+                else:
+                    ad[key].append(bd[key])
+            else:
+                print("missing key: %s" % key)
+                ad[key] = self.create_empty_dict(bd[key],dict())
+        return ad
+
+    def create_empty_dict(self, a, new_dict):
+        # Go through and create a dictionary recursively with arrays for each of the fields
+        for key in a:
+            if isinstance(a[key], dict):
+                new_dict[key] = dict()
+                self.create_empty_dict(a[key], new_dict[key])
+            elif isinstance(a[key], list):
+                new_dict[key] = dict()
+                temp_store = []
+                for obj in a[key]:
+                    temp_dict = dict()
+                    self.create_empty_dict(obj, temp_dict)
+                    temp_store.append(temp_dict)
+                new_dict[key] = temp_store
+            else:
+                new_dict[key] = [a[key]]
+        return new_dict
+
     def write_pytables(self, filename, fileCounter, bag_dir_group=None):
+
 
         # Setup the pytable names
         '''
@@ -575,17 +659,16 @@ class TableBagData():
 
             # More custom messages
             elif msg_type == 'hlpr_perception_msgs/ExtractedFeaturesArray':
-                self.write_hlpr_feature_msg(topic_group, data)
+                self.write_generic_msg(topic_group, data)
 
             elif msg_type == 'bluetooth_capture/PingResult':
                 self.write_bluetooth(topic_group, data)
 
             elif msg_type == 'cob_people_detection_msgs/DetectionArray':
                 self.write_face_detect(topic_group, data)
-
-
             else:
-                rospy.logerr("Message type: %s is not supported" % msg_type)
+                self.write_generic_msg(topic_group, data)
+                #rospy.logerr("Message type: %s is not supported" % msg_type)
         
 
     def write_wrench(self, topic_group, data):
@@ -621,7 +704,6 @@ class TableBagData():
             data['time'][replace_idx] = data['time'][good_idx]
         '''
 
-        import pdb; pdb.set_trace()
         # Convert to int16 or int8
         try:
             raw_audio = np.fromstring(''.join(data['data']), dtype=np.int16)
@@ -666,14 +748,50 @@ class TableBagData():
                 # Write off the transform information
                 self.pytable_writer_helper(body_part_group, body_part_data.keys(), tables.Float64Atom(), body_part_data)
 
-    def write_hlpr_feature_msg(self, topic_group, data):
-
-        # Cycle through and pull out the pieces of data. We have 'header, 'objects','transforms','planes'
-        import pdb; pdb.set_trace()
-
     def write_generic_msg(self, topic_group, data):
 
-        data_dict = defaultdict(dict) 
+        # Merge the dictionaries into a single dictionary of arrays
+        first_value = self.create_empty_dict(data[0], dict())
+        data = [first_value] +  data[1::]
+        merged_data = reduce(self.merge, data)
+
+        # Cycle through each of the topics and check what kind of data it is
+        for data_field in merged_data:
+            self.write_recurse(topic_group, data_field, merged_data[data_field])
+
+    def write_recurse(self, topic_group, topic, data):
+        if isinstance(data, list):
+            # check if the list is empty
+            if data:
+                data_dict = dict()
+                data_dict[topic] = data
+                if isinstance(data[0], float):
+                    self.pytable_writer_helper(topic_group, [topic], tables.Float64Atom(), data_dict)
+                elif isinstance(data[0], Time):
+                    time_data = [x.to_sec() for x in data]
+                    data_dict[topic] = time_data
+                    self.pytable_writer_helper(topic_group, [topic], tables.Float64Atom(), data_dict)
+                elif isinstance(data[0], str):
+                    len_data = len(data[0]) + 10 # add a buffer to writing the string
+                    self.pytable_writer_helper(topic_group, [topic], tables.StringAtom(itemsize=len_data), data_dict)
+                elif isinstance(data[0], int):
+                    self.pytable_writer_helper(topic_group, [topic], tables.Int64Atom(), data_dict)
+                elif isinstance(data[0], tuple):
+                    data = map(list, data)
+                    self.write_recurse(topic_group, topic, data)
+                elif isinstance(data[0], list) or isinstance(data[0], dict):
+                    obj_group = self.h5file.createGroup(topic_group, topic)
+                    for i in xrange(len(data)):
+                        item_group = self.h5file.createGroup(obj_group, topic+str(i))
+                        self.write_recurse(item_group, topic+str(i), data[i])
+                else:
+                    rospy.logwarn("Warning this type: %s unknown" % type(data))
+        elif isinstance(data, dict):
+            dict_group = self.h5file.createGroup(topic_group, topic)
+            for field in data:
+                self.write_recurse(dict_group, field, data[field])
+        else:
+            rospy.loginfo("Warn: skipped: %s" % topic)
 
     def write_clusterArray(self, topic_group, data):
 
