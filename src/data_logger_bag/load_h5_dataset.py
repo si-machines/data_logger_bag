@@ -47,34 +47,30 @@ def pull_groups(group_data, group_name):
 
     # Pull out all group names if exists
     group_fields = [_v for _v in group_data._v_groups]
+    fields = [_v for _v in group_data._v_leaves]
     
+    data_dict = dict()
     if len(group_fields) > 0:
        
-        group_data_dict = dict()
         for new_group_name in group_fields: 
 
             new_group_data = eval('group_data.'+new_group_name)
-            group_data_dict[new_group_name] = pull_groups(new_group_data, new_group_name) 
+            data_dict[new_group_name] = pull_groups(new_group_data, new_group_name) 
    
-    # Base case where we stop and store if we no longer have groups left          
-    else:
+    # Base case where we stop and store if we no longer have groups left
+    if len(fields) > 0:
 
-        node_dict = dict() 
         # Pull out fields for the topic
-        fields = [_v for _v in group_data._v_leaves]
-
         for field in fields:
-            node_dict[field] = eval('group_data.'+field+'[:]')
+            data_dict[field] = eval('group_data.'+field+'[:]')
         
-        return node_dict 
 
-    return group_data_dict
+    return data_dict
 
 def extract_data(one_run):
     '''
     Pulls out the data we want from a single run
     '''
-
     # Create a dictionary to store all of the run
     store_data = defaultdict(dict)
 
