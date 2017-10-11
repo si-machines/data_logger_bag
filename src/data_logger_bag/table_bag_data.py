@@ -551,13 +551,20 @@ class TableBagData():
                     if len(bd[key]) == 1:
                         self.merge(ad[key], bd[key][0])
                     else:
-                        import pdb; pdb.set_trace()
-                        continue
+                        # This means that there is a list of objects that need to be merged in
+                        temp_store = ad[key].copy()
+                        ad[key] = []
+                        for ob in bd[key]:
+                            merge_dict = temp_store.copy()
+                            self.merge(merge_dict,ob)
+                            ad[key].append(merge_dict)
+                elif isinstance(bd[key], tuple):
+                    if np.array(ad[key]).ndim == 1:
+                        ad[key] = np.zeros((len(ad[key]),len(bd[key])))
+                    else:
+                        ad[key] = np.vstack((ad[key],bd[key]))
                 else:
-                    try:
-                        ad[key].append(bd[key])
-                    except:
-                        import pdb; pdb.set_trace()
+                    ad[key].append(bd[key])
             else:
                 print("missing key: %s" % key)
                 ad[key] = self.create_empty_dict(bd[key],dict())
@@ -774,7 +781,11 @@ class TableBagData():
             self.write_recurse(topic_group, data_field, merged_data[data_field])
 
     def write_recurse(self, topic_group, topic, data):
-        if isinstance(data, list):
+        if isinstance(data, np.ndarray):
+            write_data = dict()
+            write_data[topic]= data
+            self.pytable_extend_writer_helper(topic_group, [topic], tables.Float64Atom(), write_data)
+        elif isinstance(data, list) or isinstance(data, tuple):
             # check if the list is empty
             if data:
                 data_dict = dict()
@@ -807,7 +818,7 @@ class TableBagData():
             dict_group = self.h5file.createGroup(topic_group, topic)
             for field in data:
                 self.write_recurse(dict_group, field, data[field])
-        elif isinstance(data, float):
+        elif isinstance(data, float) or isinstance(data,int):
             data_dict = dict()
             data_dict[topic] = [data]
             self.pytable_writer_helper(topic_group, [topic], tables.Float64Atom(), data_dict)
