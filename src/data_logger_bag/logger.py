@@ -115,7 +115,7 @@ class BagDataLogger:
         msg.runName = self.runName
         response.response = msg
         response.data_location = os.path.join(os.path.expanduser("~"),self.data_custom_location)
-        respose.filename = self.filename
+        response.filename = self.filename
         return response
 
     '''
