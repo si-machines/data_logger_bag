@@ -88,6 +88,7 @@ class BagDataLogger:
 
         # Initialize some default runName
         self.runName = "";
+        self.filename = "";
 
         # Append the task and skill onto the data_location
         self.data_custom_location = os.path.join(self.data_location, self.task, self.skill)
@@ -114,6 +115,7 @@ class BagDataLogger:
         msg.runName = self.runName
         response.response = msg
         response.data_location = os.path.join(os.path.expanduser("~"),self.data_custom_location)
+        respose.filename = self.filename
         return response
 
     '''
@@ -208,6 +210,8 @@ class BagDataLogger:
             filename = self.data_prefix + "_"+time.strftime("%Y-%m-%dT%H%M%S") + ".bag"
         else:
             filename = self.data_prefix + "_"+self.runName+"_"+time.strftime("%Y-%m-%dT%H%M%S") + ".bag"
+        # Store the current filename
+        self.filename = filename
 
         self.datapath = os.path.join(os.path.expanduser("~"),self.data_custom_location, filename)
         #rospy.loginfo("File name is: %s" % datapath)
