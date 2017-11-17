@@ -47,10 +47,12 @@ import tables
 import subprocess
 import yaml
 import glob
+import cv2
 from collections import defaultdict
 import numpy as np
 
 from geometry_msgs.msg import Pose2D, Wrench, Vector3, Point, Pose
+from genpy import Time
 
 class TableBagData():
     '''
@@ -98,9 +100,9 @@ class TableBagData():
                 
             elif msg_type == 'rospcseg/ClusterArrayV0':
                 self.process_clusterArray(topic, msg, stamp)
-                
-            elif msg_type == 'sensor_msgs/CameraInfo':
-                self.process_cameraInfo(data)
+
+            elif msg_type == 'sensor_msgs/Image':
+                self.process_image(topic, msg, stamp)
                 
             elif msg_type == 'std_msgs/String':
                 self.process_string(topic, msg, stamp)
@@ -123,7 +125,6 @@ class TableBagData():
 
             elif msg_type == 'cob_people_detection_msgs/DetectionArray':
                 self.process_face_detect(topic, msg, stamp)
-                #self.process_generic_msg(topic, msg, stamp)
 
             elif msg_type == 'bluetooth_capture/PingResult':
                 self.process_bluetooth(topic, msg, stamp)
@@ -131,18 +132,32 @@ class TableBagData():
             elif msg_type == 'geometry_msgs/Pose':
                 self.process_pose(topic, msg, stamp)
 
-            else:
-                rospy.logerr("Message type: %s is not supported" % msg_type)
+            elif msg_type == 'sensor_msgs/CompressedImage':
+                if topic not in self.all_data:
+                    self.all_data[topic] = []
+                self.all_data[topic].append(self.process_custom_msgs(topic, msg, stamp))
 
-        except:
-            rospy.logerr("Error processing topic: %s " % topic)
+            # More custom messages
+            elif msg_type == 'hlpr_perception_msgs/ExtractedFeaturesArray':
+                if topic not in self.all_data:
+                    self.all_data[topic] = []
+                self.all_data[topic].append(self.process_custom_msgs(topic, msg, stamp))
+
+            else:
+                if topic not in self.all_data:
+                    self.all_data[topic] = []
+                self.all_data[topic].append(self.process_custom_msgs(topic, msg, stamp))
+                #rospy.logerr("Message type: %s is not supported" % msg_type)
+
+        except Exception, e:
+            rospy.logerr("Error processing topic: %s. Error is: %s " % (topic, str(e)))
 
     def msg_field_helper(self, msg):
         '''
         Used for custom messages that are not standard in ROS
         '''
        
-        helper_fields = ['serialize', 'serialize_numpy', 'deserialize', 'deserialize_numpy', 'append', 'count', 'extend', 'index', 'insert', 'pop', 'remove', 'reverse', 'sort']
+        helper_fields = ['serialize', 'serialize_numpy', 'deserialize', 'deserialize_numpy', 'append', 'count', 'extend', 'index', 'insert', 'pop', 'remove', 'reverse', 'sort','bit_length', 'conjugate', 'denominator', 'imag', 'numerator', 'real']
         fields = [name for name in dir(msg) if not (name.startswith('__') or name.startswith('_') or name in helper_fields)]
         return fields 
 
@@ -179,6 +194,31 @@ class TableBagData():
                 temp = self.generic_msg_recurse(eval('msg.'+field), field, temp)
             data_info[top_field] = temp
             return data_info
+
+    def process_custom_msgs(self, topic, msg, stamp):
+        # Take any message and recursively go down until we hit a base message
+        store_dict = dict()
+        if type(msg) == list:
+            n_msg_store = []
+            for n_msg in msg:
+                n_msg_store.append(self.process_custom_msgs(topic, n_msg, stamp))
+            return n_msg_store
+        else:
+            topic_names = self.msg_field_helper(msg)
+
+            # import the different messages
+            for msg_topic in topic_names:
+
+                msg_val = eval('msg.'+msg_topic)
+                if type(msg_val) == list:
+                    store_dict[msg_topic] = self.process_custom_msgs(msg_topic, msg_val, stamp)
+                else:
+                    # Get the base message
+                    if hasattr(msg_val, '_type'):
+                        store_dict[msg_topic] = self.process_custom_msgs(msg_topic, msg_val, stamp)
+                    else:
+                        store_dict[msg_topic] = msg_val
+        return store_dict
 
     def process_face_detect(self, topic, msg, stamp):
 
@@ -255,6 +295,26 @@ class TableBagData():
             self.all_data[topic]['dist_label'].append('')
         
                 
+    def process_image(self, topic, msg, stamp):
+        msg_fields = self.msg_field_helper(msg)
+        for msg_field in msg_fields:
+            if msg_field not in self.all_data[topic]:
+                self.all_data[topic][msg_field] = []
+
+            if msg_field == 'data':
+                convert_data = np.fromstring(msg.data, dtype=np.uint8)
+                if len(convert_data) == 0:
+                    convert_data = np.array([float('nan')]*921600)
+                    rospy.logwarn("Warning - assume image is 640x480")
+                self.all_data[topic][msg_field].append(convert_data)
+            else:
+                self.all_data[topic][msg_field].append(eval('msg.'+msg_field))
+
+        # Store all of the timestamps by seconds from stamp
+        if 'time' not in self.all_data[topic]:
+            self.all_data[topic]['time'] = []
+        self.all_data[topic]['time'].append(stamp.to_sec())
+
     def process_bluetooth(self, topic, msg, stamp):
 
         msg_fields = self.msg_field_helper(msg)
@@ -357,7 +417,12 @@ class TableBagData():
             self.all_data[topic]['time'] = []
 
         if hasattr(msg, 'header'):
-            self.all_data[topic]['time'].append(msg.header.stamp.to_sec())
+            stamp = msg.header.stamp
+            #if hasattr(stamp,'data'):
+            #    time = stamp.data.to_sec()
+            #else:
+            time = stamp.to_sec()
+            self.all_data[topic]['time'].append(time)
         else:
             self.all_data[topic]['time'].append(stamp.to_sec())
             
@@ -411,12 +476,6 @@ class TableBagData():
 
         self.all_data[topic]['max_item'] = max(cur_max,len(clusters))
             
-
-    def process_cameraInfo(self, msg):
-
-        #print "processing sensor_msgs/CameraInfo message"
-        return
-
     def process_string(self, topic, msg, stamp):
 
         # It is currently the same for this type
@@ -469,7 +528,68 @@ class TableBagData():
         # It is currently the same for this type
         self.process_int8(topic, msg, stamp)
 
+    def merge(self, ad, bd):
+        for key in bd:
+            if key in ad:
+                if isinstance(ad[key], dict) and isinstance(bd[key], dict):
+                    self.merge(ad[key], bd[key])
+                elif isinstance(ad[key], list) and isinstance(bd[key], list):
+                    temp_store = []
+                    for i in xrange(len(bd[key])):
+                        if i >= len(ad[key]):
+                            temp_store.append(self.create_empty_dict(bd[key][i],dict()))
+                        elif isinstance(ad[key][i], dict):
+                            temp_dict = ad[key][i].copy()
+                            self.merge(temp_dict,bd[key][i])
+                            temp_store.append(temp_dict)
+                        else:
+                            temp_dict = ad[key]
+                            self.merge(temp_dict,bd[key][i])
+                            temp_store.append(temp_dict)
+                    ad[key] = temp_store
+                elif isinstance(ad[key], dict) and isinstance(bd[key],list):
+                    if len(bd[key]) == 1:
+                        self.merge(ad[key], bd[key][0])
+                    else:
+                        # This means that there is a list of objects that need to be merged in
+                        temp_store = ad[key].copy()
+                        ad[key] = []
+                        for ob in bd[key]:
+                            merge_dict = temp_store.copy()
+                            self.merge(merge_dict,ob)
+                            ad[key].append(merge_dict)
+                elif isinstance(bd[key], tuple):
+                    if np.array(ad[key]).ndim == 1:
+                        ad[key] = np.zeros((len(ad[key]),len(bd[key])))
+                    else:
+                        ad[key] = np.vstack((ad[key],bd[key]))
+                else:
+                    ad[key].append(bd[key])
+            else:
+                print("missing key: %s" % key)
+                ad[key] = self.create_empty_dict(bd[key],dict())
+        return ad
+
+    def create_empty_dict(self, ad, new_dict):
+        # Go through and create a dictionary recursively with arrays for each of the fields
+        for key in ad:
+            if isinstance(ad[key], dict):
+                new_dict[key] = dict()
+                self.create_empty_dict(ad[key], new_dict[key])
+            elif isinstance(ad[key], list):
+                new_dict[key] = dict()
+                temp_store = []
+                for obj in ad[key]:
+                    temp_dict = dict()
+                    self.create_empty_dict(obj, temp_dict)
+                    temp_store.append(temp_dict)
+                new_dict[key] = temp_store
+            else:
+                new_dict[key] = [ad[key]]
+        return new_dict
+
     def write_pytables(self, filename, fileCounter, bag_dir_group=None):
+
 
         # Setup the pytable names
         '''
@@ -483,14 +603,17 @@ class TableBagData():
         #group_name = "exploration_"+path_name[0].split("/")[-1]+"_"+str(fileCounter) 
         #group_name = ('_'.join(path_name[1].split('_')[0:-1])+"_"+str(fileCounter).zfill(3)).replace('-','_')
         group_name = ('_'.join(path_name[1].split('_')[0:-1])+"_"+str(fileCounter).zfill(3)).replace('-','_')
+        file_name = path_name[1].split('_')
+        group_name = file_name[0]+'_'+'_'.join(path_name[0].split('/')[-2::])+'_'+file_name[-1]+'_'+str(fileCounter).zfill(3)
 
         # Add in custom name conversion 
+        group_name = group_name.replace('-','_')
         group_name = group_name.replace('.','Decimal')
         group_name = group_name.replace('[','LeftBracket')
         group_name = group_name.replace(']','RightBracket')
         group_name = group_name.replace(',','Comma')
         group_name = group_name.replace(':','Colon')
-        
+       
         rospy.loginfo("Writing file: %s to pytable as %s" % (path_name[1], group_name))
 
         if bag_dir_group is None:
@@ -518,9 +641,12 @@ class TableBagData():
             elif msg_type == 'rospcseg/ClusterArrayV0':
                 self.write_clusterArray(topic_group, data)
                 
-            elif msg_type == 'sensor_msgs/CameraInfo':
-                self.write_cameraInfo(topic_group, data)
-                
+            elif msg_type == 'sensor_msgs/Image':
+                self.write_image(topic_group, data)
+
+            elif msg_type == 'sensor_msgs/CompressedImage':
+                self.write_kinect_image(topic_group, data)
+
             elif msg_type == 'std_msgs/String':
                 self.write_string(topic_group, data)
                 
@@ -542,19 +668,43 @@ class TableBagData():
             elif msg_type == 'audio_common_msgs/AudioData':
                 self.write_audio16(topic_group, data)
 
+            # More custom messages
+            elif msg_type == 'hlpr_perception_msgs/ExtractedFeaturesArray':
+                self.write_generic_msg(topic_group, data)
+
             elif msg_type == 'bluetooth_capture/PingResult':
                 self.write_bluetooth(topic_group, data)
 
             elif msg_type == 'cob_people_detection_msgs/DetectionArray':
                 self.write_face_detect(topic_group, data)
-
             else:
-                rospy.logerr("Message type: %s is not supported" % msg_type)
+                self.write_generic_msg(topic_group, data)
+                #rospy.logerr("Message type: %s is not supported" % msg_type)
         
 
     def write_wrench(self, topic_group, data):
 
         self.pytable_writer_helper(topic_group, data.keys(), tables.Float64Atom(), data)
+
+    def write_image(self, topic_group, data):
+        # Note: you need to load and reshape (data.reshape(480,640,3))
+        self.pytable_writer_helper(topic_group, ['data'], tables.UInt8Atom(), data)
+        self.pytable_writer_helper(topic_group, ['width','height','step','is_bigendian'], tables.Int64Atom(), data)
+        self.pytable_writer_helper(topic_group, ['encoding'], tables.StringAtom(itemsize=15), data)
+        self.pytable_writer_helper(topic_group, ['time'], tables.Float64Atom(), data)
+
+    def write_kinect_image(self, topic_group, data):
+        # Note: you need to load and reshape (data.reshape(480,640,3))
+        first_value = self.create_empty_dict(data[0], dict())
+        data = [first_value] +  data[1::]
+        merged_data = reduce(self.merge, data)
+
+        image_data = [np.fromstring(x,np.uint8) if isinstance(x,str) else x for x in merged_data['data']]
+        merged_data['data'] = image_data
+        filters = tables.Filters(5,'zlib')
+        self.pytable_extend_writer_helper(topic_group, ['data'], tables.UInt8Atom(), merged_data, filters=filters)
+        self.write_recurse(topic_group, 'format', merged_data['format'])
+        self.write_recurse(topic_group, 'header', merged_data['header'])
 
     def write_int8(self, topic_group, data):
 
@@ -577,16 +727,23 @@ class TableBagData():
             data['data'][replace_idx] = data['data'][good_idx]
             data['time'][replace_idx] = data['time'][good_idx]
         '''
+        converted_arr = []
+        for seg in data['data']:
+            if isinstance(seg, int):
+                converted_arr.append(np.array([seg]))
+            else:
+                converted_arr.append(np.fromstring(seg, dtype=np.uint8))
 
-        # Convert to int16
-        raw_audio = np.fromstring(''.join(data['data']), dtype=np.int16)
-
+        data['raw_audio'] = converted_arr
+        #data['raw_audio'] = np.fromstring(''.join(data['data']), dtype=np.uint8)
         # Pull out left and right audio
         # Warning: this might be flipped...(right/left)
-        data['right_audio'], data['left_audio'] = raw_audio[0::2],raw_audio[1::2]
+        # NOTE: Don't need to do this currently for mono channel (Kinect and Mic). Later make a flag
+        #data['right_audio'], data['left_audio'] = raw_audio[0::2],raw_audio[1::2]
+        #self.pytable_writer_helper(topic_group, ['left_audio', 'right_audio'], tables.Int64Atom(), data)
 
-        self.pytable_writer_helper(topic_group, ['left_audio', 'right_audio'], tables.Int64Atom(), data)
-        self.pytable_writer_helper(topic_group, ['time'], tables.Float64Atom(), data)
+        self.pytable_writer_helper(topic_group, ['time'], tables.Int64Atom(), data)
+        self.pytable_extend_writer_helper(topic_group, ['raw_audio'], tables.UInt8Atom(), data)
 
     def write_jointState(self, topic_group, data):
 
@@ -613,10 +770,64 @@ class TableBagData():
                 # Write off the transform information
                 self.pytable_writer_helper(body_part_group, body_part_data.keys(), tables.Float64Atom(), body_part_data)
 
-
     def write_generic_msg(self, topic_group, data):
+        # Merge the dictionaries into a single dictionary of arrays
+        first_value = self.create_empty_dict(data[0], dict())
+        data = [first_value] +  data[1::]
+        merged_data = reduce(self.merge, data)
 
-        data_dict = defaultdict(dict) 
+        # Cycle through each of the topics and check what kind of data it is
+        for data_field in merged_data:
+            self.write_recurse(topic_group, data_field, merged_data[data_field])
+
+    def write_recurse(self, topic_group, topic, data):
+        if isinstance(data, np.ndarray):
+            write_data = dict()
+            write_data[topic]= data
+            self.pytable_extend_writer_helper(topic_group, [topic], tables.Float64Atom(), write_data)
+        elif isinstance(data, list) or isinstance(data, tuple):
+            # check if the list is empty
+            if data:
+                data_dict = dict()
+                data_dict[topic] = data
+                if isinstance(data[-1], float):
+                    self.pytable_writer_helper(topic_group, [topic], tables.Float64Atom(), data_dict)
+                elif isinstance(data[-1], Time):
+                    time_data = [x.to_sec() for x in data]
+                    data_dict[topic] = time_data
+                    self.pytable_writer_helper(topic_group, [topic], tables.Float64Atom(), data_dict)
+                elif isinstance(data[-1], str):
+                    len_data = max(1,len(data[-1])) # add a buffer to writing the string
+                    self.pytable_writer_helper(topic_group, [topic], tables.StringAtom(itemsize=len_data), data_dict)
+                elif isinstance(data[-1], int):
+                    self.pytable_writer_helper(topic_group, [topic], tables.Int64Atom(), data_dict)
+                elif isinstance(data[-1], tuple):
+                    data = [list(x) if not isinstance(x,float) else [x] for x in data]
+                    self.write_recurse(topic_group, topic, data)
+                elif isinstance(data[-1], list) or isinstance(data[-1], dict):
+                    obj_group = self.h5file.createGroup(topic_group, topic)
+                    for i in xrange(len(data)):
+                        if isinstance(data[-1],list):
+                            item_group = self.h5file.createGroup(obj_group, topic+str(i))
+                        else:
+                            item_group = obj_group
+                        self.write_recurse(item_group, topic+str(i), data[i])
+                else:
+                    rospy.logwarn("Warning this type: %s unknown" % type(data))
+        elif isinstance(data, dict):
+            dict_group = self.h5file.createGroup(topic_group, topic)
+            for field in data:
+                self.write_recurse(dict_group, field, data[field])
+        elif isinstance(data, float) or isinstance(data,int):
+            data_dict = dict()
+            data_dict[topic] = [data]
+            self.pytable_writer_helper(topic_group, [topic], tables.Float64Atom(), data_dict)
+        elif not data:
+            # Data is empty, so skip
+            pass
+        else:
+            import pdb; pdb.set_trace()
+            rospy.loginfo("Warn: skipped: %s" % topic)
 
     def write_clusterArray(self, topic_group, data):
 
@@ -702,8 +913,26 @@ class TableBagData():
 
         # Go through the fields and write to the group
         for field in fields:
-            data_size = np.shape(data[field])
-            carray = self.h5file.createCArray(topic_group, field, data_type, data_size)
-            carray[:] = data[field]
+            try:
+                data_size = np.shape(data[field])
+                carray = self.h5file.createCArray(topic_group, field, data_type, data_size)
+                carray[:] = data[field]
+            except:
+                self.pytable_extend_writer_helper(topic_group, [field], data_type, data)
 
+    def pytable_extend_writer_helper(self, topic_group, fields, data_type, data, filters=None):
 
+        # Go through the fields and write to the group
+        for field in fields:
+            earray = self.h5file.create_vlarray(topic_group, field, data_type, filters=filters)
+            for row in data[field]:
+                try:
+                    if isinstance(row,tuple):
+                        earray.append(row)
+                    elif not isinstance(row,np.ndarray):
+                        row = np.array([row])
+                        earray.append(tuple(row.tolist()))
+                    else:
+                        earray.append(tuple(row.tolist()))
+                except:
+                    import pdb; pdb.set_trace()

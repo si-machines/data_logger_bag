@@ -68,7 +68,7 @@ class DataTableBagProcessor():
         ###################################################################
  
         # Default topics to skip and subsample to
-        default_skip_topics = "camera/depth_registered/image_raw camera/rgb/image_raw camera/rgb/camera_info camera/depth_registered/camera_info"
+        default_skip_topics = "camera/depth_registered/image_raw camera/rgb/camera_info camera/depth_registered/camera_info"
         default_trigger_topic = "C6_FSM_state"
 
         # read paramater
@@ -297,30 +297,51 @@ class DataTableBagProcessor():
 
                 # create dummy objects if we're subsampling
                 if self.sub_sample:
-                    self.data_store[topics['topic']] = (self.create_dummy_msg(topics['topic']), 0)
+                    self.data_store[topics['topic']] = (self.create_dummy_msg(topics['type']), 0)
 
         # Go through the topics in the bag file
         for topic, msg, stamp in bag.read_messages(topics=self.all_topics):
-            
+
             # Store off the topics not being downsampled
             self.data_store[topic] = (msg,stamp)
 
             # write off the values
             if self.sub_sample:
                 if topic == self.trigger_topic:
-
                     # Go through all of the topics we stored off and write them to
                     # a dictionary
                     for topic_store in self.data_store:
-                        if isinstance(self.data_store[topic_store], list):
-                            self.bagData.process_msg(topic_store, self.data_store[topic_store])
-                        else: 
-                            self.bagData.process_msg(topic_store, (self.data_store[topic_store][0], stamp))
+                        if not self.data_store[topic_store][0]._type == 'audio_common_msgs/AudioData':
+                            if isinstance(self.data_store[topic_store], list):
+                                self.bagData.process_msg(topic_store, self.data_store[topic_store])
+                            else: 
+                                self.bagData.process_msg(topic_store, (self.data_store[topic_store][0], stamp))
+                elif msg._type == 'audio_common_msgs/AudioData':
+                    self.bagData.process_msg(topic, (msg, stamp))
 
             else:
                 self.bagData.process_msg(topic, (msg, stamp))
 
-    def create_dummy_msg(self, topic):
+    def import_name_helper(self, name):
+
+        name = name.replace('int','Int')
+        name = name.replace('uInt','UInt')
+        name = name.replace('multi','Multi')
+        name = name.replace('array','Array')
+        name = name.replace('byte','Byte')
+        name = name.replace('bool','Bool')
+        name = name.replace('char','Char')
+        name = name.replace('empty','Empty')
+        name = name.replace('float','Float')
+        name = name.replace('duration','Duration')
+        name = name.replace('header','Header')
+        name = name.replace('rgba','RGBA')
+        name = name.replace('color','Color')
+        name = name.replace('time','Time')
+        name = name.replace('string','String')
+        return name
+
+    def create_dummy_msg(self, msg_type):
         '''
         This function is only called during subsampling.  This takes care of the possiblity
         that certain messages have not been seen before the first "tick" of the trigger
@@ -332,7 +353,48 @@ class DataTableBagProcessor():
         '''
 
         # Custom function that will process the messages depending on type
-        msg_type = self.bagData.topic_types[topic] 
+        array = False
+        stop_recurse = False
+
+        # Parse the message type and import
+        msg_type_arr = msg_type.split('/')
+        if len(msg_type_arr) > 1:
+            package = msg_type_arr[0]
+            msg_name = msg_type_arr[1]
+        else:
+            package = 'std_msgs'
+            msg_name = self.import_name_helper(msg_type_arr[0])
+            stop_recurse = True
+
+        if '[' in msg_name:
+            msg_name = msg_name.split('[')[0]
+            array = True 
+
+        # Try to import the message
+        try:
+            exec('from ' + package + '.msg import ' + msg_name)
+        except ImportError:
+            raise ImportError('Could not import: %s' % '.'.join((package, msg_name)))
+
+        # Now try to create a empty message of that type
+        exec('obj= ' +msg_name+'()')
+
+        if not stop_recurse:
+            # Get the name of the field and the field type
+            all_fields = obj.__slots__
+            all_types = obj._slot_types
+
+            for i in xrange(len(all_types)):
+                sub_msg_type = all_types[i]
+                sub_msg_name = all_fields[i]
+                sub_obj = self.create_dummy_msg(sub_msg_type)
+                if sub_msg_name != "labels": #THIS IS A HACK
+                    if hasattr(sub_obj,'data'):
+                        sub_obj = sub_obj.data
+                exec('obj.'+sub_msg_name+'=sub_obj')
+
+        return obj
+        '''
         obj = Object()
         obj._type = msg_type
 
@@ -433,6 +495,15 @@ class DataTableBagProcessor():
             obj.data = False
             return obj
 
+        elif msg_type == 'sensor_msgs/Image':
+            obj.header = None
+            obj.height = float('nan')
+            obj.width = float('nan')
+            obj.encoding = ""
+            obj.step = float('nan')
+            obj.data = ''
+            return obj
+
         elif msg_type == 'geometry_msgs/Pose2D':
             obj.x = float('nan')
             obj.y = float('nan')
@@ -457,6 +528,7 @@ class DataTableBagProcessor():
 
         else:
             rospy.logerr("Message type: %s is not supported" % msg_type)
+        '''
 
 class Object:
     pass

@@ -45,8 +45,13 @@ import subprocess
 import signal
 from std_msgs.msg import Bool, String
 from data_logger_bag.msg import LogControl
+from data_logger_bag.srv import GetSettingsResponse, GetSettings
 
 class BagDataLogger:
+
+    REQUEST_LOGGER_SETTING_SRV = "get_data_logger_settings"
+    GLOBAL_CONTROL_TOPIC = "/data_logger_bag/control"
+    GLOBAL_START_STOP_TOPIC = "/data_logger_bag/flag_topic"
 
     ''' 
     Initialize the node 
@@ -70,6 +75,10 @@ class BagDataLogger:
         self.data_location = rospy.get_param("~datapath", default_data_location)
         self.data_prefix = rospy.get_param("~data_prefix", default_data_prefix)
 
+        # Set the global topic name
+        rospy.set_param(self.GLOBAL_CONTROL_TOPIC, self.c6_task_topic)
+        rospy.set_param(self.GLOBAL_START_STOP_TOPIC, self.logger_flag_topic)
+
         # Initialize the flag to false
         self.logger_flag = False
 
@@ -79,6 +88,7 @@ class BagDataLogger:
 
         # Initialize some default runName
         self.runName = "";
+        self.filename = "";
 
         # Append the task and skill onto the data_location
         self.data_custom_location = os.path.join(self.data_location, self.task, self.skill)
@@ -86,7 +96,27 @@ class BagDataLogger:
         # Setup publisher for bagfile
         self.bag_file_loc_pub = rospy.Publisher('bag_file_loc', String, queue_size=10)
 
+        # Setup service for getting the current settings
+        self.setting_srv = rospy.Service(self.REQUEST_LOGGER_SETTING_SRV, GetSettings, self._return_settings)
+
         rospy.loginfo("Initialized data logger node with logger flag topic: %s" % self.logger_flag_topic)
+
+    '''
+    Setup service response to getting the current settings of the logger
+    '''
+    def _return_settings(self, req):
+
+        response = GetSettingsResponse()
+        msg = LogControl()
+        msg.taskName = self.task
+        msg.skillName = self.skill
+        msg.actionType = self.data_prefix
+        msg.topics = self.record_topics
+        msg.runName = self.runName
+        response.response = msg
+        response.data_location = os.path.join(os.path.expanduser("~"),self.data_custom_location)
+        response.filename = self.filename
+        return response
 
     '''
     Setup the subscribers
@@ -180,6 +210,8 @@ class BagDataLogger:
             filename = self.data_prefix + "_"+time.strftime("%Y-%m-%dT%H%M%S") + ".bag"
         else:
             filename = self.data_prefix + "_"+self.runName+"_"+time.strftime("%Y-%m-%dT%H%M%S") + ".bag"
+        # Store the current filename
+        self.filename = filename
 
         self.datapath = os.path.join(os.path.expanduser("~"),self.data_custom_location, filename)
         #rospy.loginfo("File name is: %s" % datapath)
