@@ -67,6 +67,9 @@ class BagDataLogger:
         default_data_location = "data"
         default_data_prefix = "playback"
         default_c6_task_topic = "C6_Task_Description"
+        default_task = "default_task"
+        default_skill = "default_skill"
+        default_timestamp = True
 
         # Get parameter names from the param server
         self.c6_task_topic = rospy.get_param("~c6_task_topic", default_c6_task_topic) 
@@ -74,6 +77,7 @@ class BagDataLogger:
         self.record_topics = rospy.get_param("~record_topics", default_record_topics)
         self.data_location = rospy.get_param("~datapath", default_data_location)
         self.data_prefix = rospy.get_param("~data_prefix", default_data_prefix)
+        self.timestamp = rospy.get_param("~timestamp", default_timestamp)
 
         # Set the global topic name
         rospy.set_param(self.GLOBAL_CONTROL_TOPIC, self.c6_task_topic)
@@ -83,8 +87,8 @@ class BagDataLogger:
         self.logger_flag = False
 
         # Intialize default task and skill names
-        self.task = "default_task"
-        self.skill = "default_skill"
+        self.task = rospy.get_param("~task", default_task)
+        self.skill = rospy.get_param("~skill", default_skill)
 
         # Initialize some default runName
         self.runName = "";
@@ -207,9 +211,17 @@ class BagDataLogger:
     
         rospy.loginfo("Set up bag file to write to")
         if self.runName is "":
-            filename = self.data_prefix + "_"+time.strftime("%Y-%m-%dT%H%M%S") + ".bag"
+            if self.timestamp:
+                filename = self.data_prefix + "_"+time.strftime("%Y-%m-%dT%H%M%S") + ".bag"
+            else:
+                filename = self.data_prefix + ".bag"
+                
         else:
-            filename = self.data_prefix + "_"+self.runName+"_"+time.strftime("%Y-%m-%dT%H%M%S") + ".bag"
+            if self.timestamp:
+                filename = self.data_prefix + "_"+self.runName+"_"+time.strftime("%Y-%m-%dT%H%M%S") + ".bag"
+            else:
+                filename = self.data_prefix + ".bag"
+
         # Store the current filename
         self.filename = filename
 
