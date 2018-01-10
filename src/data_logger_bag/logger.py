@@ -173,9 +173,9 @@ class BagDataLogger:
 
             # Change prefix of the data to say if we are demonstrating or playing back
             if (playback_flag):
-                self.data_prefix="playback"
+                self.data_prefix="playback_"+self.data_prefix
             else:
-                self.data_prefix="learning"
+                self.data_prefix="learning_"+self.data_prefix
 
             rospy.loginfo("Data prefix is: %s" % self.data_prefix)
 
